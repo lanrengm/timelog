@@ -3,11 +3,13 @@ import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Set
 // Remember to rename these classes and interfaces!
 
 interface MyPluginSettings {
-	mySetting: string;
+	setting1: string;
+	setting2: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+	setting1: 'setting 1 default',
+	setting2: 'setting 2 default'
 }
 
 export default class MyPlugin extends Plugin {
@@ -17,16 +19,19 @@ export default class MyPlugin extends Plugin {
 		await this.loadSettings();
 
 		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
+		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin xxx', (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+			new Notice('This is a notice! ');
 		});
 		// Perform additional things with the ribbon
 		ribbonIconEl.addClass('my-plugin-ribbon-class');
 
 		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+		const statusBarItemEl1 = this.addStatusBarItem();
+		statusBarItemEl1.setText('Status Bar Text');
+
+		const statusBarItemEl2 = this.addStatusBarItem();
+		statusBarItemEl2.setText('Status Bar Text');
 
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
@@ -97,12 +102,14 @@ class SampleModal extends Modal {
 	}
 
 	onOpen() {
-		const {contentEl} = this;
+		const {titleEl,contentEl} = this;
+		titleEl.setText('Title');
 		contentEl.setText('Woah!');
 	}
 
 	onClose() {
-		const {contentEl} = this;
+		const {titleEl,contentEl} = this;
+		titleEl.empty();
 		contentEl.empty();
 	}
 }
@@ -122,13 +129,24 @@ class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Setting #1')
-			.setDesc('It\'s a secret')
+			.setDesc('Setting 1 desc.')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setPlaceholder('Setting 1 placeholder')
+				.setValue(this.plugin.settings.setting1)
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.setting1 = value;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+		.setName('Setting #2')
+		.setDesc('Setting 2 desc.')
+		.addText(text => text
+			.setPlaceholder('Setting 2 placeholder')
+			.setValue(this.plugin.settings.setting2)
+			.onChange(async (value) => {
+				this.plugin.settings.setting2 = value;
+				await this.plugin.saveSettings();
+			}));
 	}
 }

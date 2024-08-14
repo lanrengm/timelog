@@ -1,11 +1,15 @@
 {
 	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
-	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
+	"name": "Lanren Test",
+	"version": "0.0.1",
+	"minAppVersion": "1.6.7",
+	"description": "Some test",
+	"author": "Lanren",
 	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"fundingUrl": {
+		"x":"https://obsidian.md/pricing",
+		"y": "https://obsidian.md/pricing",
+		"z": "https://obsidian.md/pricing"
+	},
 	"isDesktopOnly": false
 }
