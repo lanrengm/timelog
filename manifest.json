@@ -1,15 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Lanren Test",
+	"id": "lanren-plugin",
+	"name": "懒人插件",
 	"version": "0.0.1",
 	"minAppVersion": "1.6.7",
-	"description": "Some test",
+	"description": "懒人插件",
 	"author": "Lanren",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": {
-		"x":"https://obsidian.md/pricing",
-		"y": "https://obsidian.md/pricing",
-		"z": "https://obsidian.md/pricing"
-	},
+	"authorUrl": "https://github.com/lanrengm",
 	"isDesktopOnly": false
 }
