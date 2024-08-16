@@ -1,37 +1,71 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, setIcon, getIconIds } from 'obsidian';
+import { clearInterval } from 'timers';
 
 // Remember to rename these classes and interfaces!
 
 interface MyPluginSettings {
 	setting1: string;
 	setting2: string;
+	enableTimer: boolean;
 }
+
+type StatusBarIconButton = HTMLElement;
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	setting1: 'setting 1 default',
-	setting2: 'setting 2 default'
+	setting2: 'setting 2 default',
+	enableTimer: false,
 }
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
 
+	timerDriver: NodeJS.Timer | null = null;
+	timerCount: number = 0;
+
 	async onload() {
 		await this.loadSettings();
 
 		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin xxx', (evt: MouseEvent) => {
+		const ribbonIconEl = this.addRibbonIcon('messages-square', 'Sample Plugin xxx', (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
 			new Notice('This is a notice! ');
 		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl1 = this.addStatusBarItem();
-		statusBarItemEl1.setText('Status Bar Text');
+		const timerLabel = this.addStatusBarItem();
+		const playBtn: StatusBarIconButton = this.addStatusBarItem();
+		const resetBtn: StatusBarIconButton = this.addStatusBarItem();
+		timerLabel.setText('00:00:00');
 
-		const statusBarItemEl2 = this.addStatusBarItem();
-		statusBarItemEl2.setText('Status Bar Text');
+		setIcon(playBtn, 'play');
+		setIcon(resetBtn, 'rotate-ccw');
+		playBtn.addEventListener('click', () => {
+			if (this.timerDriver){
+				// If the timer is running, to pause it.
+				setIcon(playBtn, 'play');
+				window.clearInterval(this.timerDriver!);
+				this.timerDriver = null;
+			} else {
+				// If the timer was paused, to run it.
+				setIcon(playBtn, 'pause');
+				this.timerDriver = setInterval(()=>{
+					this.timerCount+=1;
+					timerLabel.setText(`${
+						String(Math.floor(this.timerCount/3600)).padStart(2,'0')}:${
+						String(Math.floor(this.timerCount/60)).padStart(2, '0')}:${
+							String(this.timerCount%60).padStart(2, '0')}`);
+				}, 1000);
+			}
+		});
+		resetBtn.addEventListener('click', () => {
+			if (this.timerDriver) {
+				window.clearInterval(this.timerDriver!);
+				this.timerDriver = null;
+				setIcon(playBtn, 'play');
+			}
+			this.timerCount = 0;
+			timerLabel.setText('00:00:00');
+		});
 
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
@@ -105,6 +139,9 @@ class SampleModal extends Modal {
 		const {titleEl,contentEl} = this;
 		titleEl.setText('Title');
 		contentEl.setText('Woah!');
+		const c1 = contentEl.createDiv();
+		c1.setText('xxx');
+		
 	}
 
 	onClose() {
@@ -128,8 +165,8 @@ class SampleSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('Setting 1 desc.')
+			.setName('xxx')
+			.setDesc('xxx')
 			.addText(text => text
 				.setPlaceholder('Setting 1 placeholder')
 				.setValue(this.plugin.settings.setting1)
@@ -148,5 +185,17 @@ class SampleSettingTab extends PluginSettingTab {
 				this.plugin.settings.setting2 = value;
 				await this.plugin.saveSettings();
 			}));
+		
+		new Setting(containerEl)
+			.setName('正向计时器')
+			.setDesc('统计工作时长')
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.enableTimer)
+					.onChange(async (value) => {
+						this.plugin.settings.enableTimer = value;
+						this.plugin.saveSettings();
+					});
+			});
 	}
 }

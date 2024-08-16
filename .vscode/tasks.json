@@ -2,9 +2,24 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "Dev",
+			"type": "shell",
+			"command": "yarn run dev",
+			"group": "test",
+			"presentation": {
+				"echo": false,
+				"reveal": "never",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": false
+			}
+		},
+		// windows cmd 命令
+		{
 			"label": "Build",
 			"type": "shell",
-			"command": "yarn run build",
+			"command": "yarn run build && xcopy manifest.json .\\lanren-plugin\\ && xcopy main.js .\\lanren-plugin.\\ && xcopy styles.css .\\lanren-plugin.\\",
 			"group": "build",
 			"presentation": {
 				"echo": false,
