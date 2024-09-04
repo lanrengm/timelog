@@ -1,7 +1,29 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, setIcon, getIconIds } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, setIcon, getIconIds, ItemView, WorkspaceLeaf, View } from 'obsidian';
 import { clearInterval } from 'timers';
 
 // Remember to rename these classes and interfaces!
+
+const VIEW_TYPE_EXAMPLE = "example-view";
+
+class ExampleView extends ItemView {
+	constructor(leaf: WorkspaceLeaf) {
+		super(leaf);
+	}
+	getViewType() {
+		return VIEW_TYPE_EXAMPLE;
+	}
+	getDisplayText(): string {
+		return "Example view";
+	}
+	async onOpen() {
+		const container = this.containerEl.children[1];
+		container.empty();
+		container.createEl("h4", { text: "Hello World!"});
+	}
+	async onClose() {
+
+	}
+}
 
 interface MyPluginSettings {
 	setting1: string;
@@ -107,6 +129,14 @@ export default class MyPlugin extends Plugin {
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new SampleSettingTab(this.app, this));
 
+		this.registerView(
+			VIEW_TYPE_EXAMPLE,
+			(leaf) => new ExampleView(leaf)
+		);
+		this.addRibbonIcon("dice", "Activate view", () => {
+			this.activateView();
+		});
+
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
 		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
@@ -119,6 +149,19 @@ export default class MyPlugin extends Plugin {
 
 	onunload() {
 
+	}
+
+	async activateView() {
+		const { workspace } = this.app;
+		let leaf: WorkspaceLeaf | null = null;
+		const leaves = workspace.getLeavesOfType(VIEW_TYPE_EXAMPLE);
+		if (leaves.length > 0) {
+			leaf = leaves[0];
+		} else {
+			leaf = workspace.getRightLeaf(false);
+			await leaf!.setViewState({ type: VIEW_TYPE_EXAMPLE, active: true });
+			workspace.revealLeaf(leaf!);
+		}
 	}
 
 	async loadSettings() {
@@ -194,7 +237,7 @@ class SampleSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.enableTimer)
 					.onChange(async (value) => {
 						this.plugin.settings.enableTimer = value;
-						this.plugin.saveSettings();
+						await this.plugin.saveSettings();
 					});
 			});
 	}
