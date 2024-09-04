@@ -15,11 +15,27 @@
 				"clear": false
 			}
 		},
-		// windows cmd 命令
 		{
+			// 本 task 依赖于 windows 平台的 xcopy 命令
 			"label": "Build",
 			"type": "shell",
 			"command": "yarn run build && xcopy manifest.json .\\lanren-plugin\\ && xcopy main.js .\\lanren-plugin.\\ && xcopy styles.css .\\lanren-plugin.\\",
+			"group": "build",
+			"presentation": {
+				"echo": false,
+				"reveal": "never",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": false
+			}
+		},
+		{
+			// 本 task 依赖于 windows 平台的 xcopy 命令
+			// 安装到正式库
+			"label": "Install",
+			"type": "shell",
+			"command": "xcopy /s/y lanren-plugin D:\\Dropbox\\.obsidian\\plugins\\lanren-plugin\\",
 			"group": "build",
 			"presentation": {
 				"echo": false,
