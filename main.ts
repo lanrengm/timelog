@@ -101,14 +101,14 @@ export default class MyPlugin extends Plugin {
 			VIEW_TYPE_EXAMPLE,
 			(leaf) => new ExampleView(leaf)
 		);
-		this.addRibbonIcon("dice", "Activate view", () => {
+		this.addRibbonIcon("shield-plus", "L R View", () => {
 			this.activateView();
 		});
 
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
 		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
+			// console.log('click', evt);
 		});
 
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
@@ -124,10 +124,11 @@ export default class MyPlugin extends Plugin {
 		if (leaves.length > 0) {
 			leaf = leaves[0];
 		} else {
-			leaf = workspace.getRightLeaf(false);
+			leaf = workspace.getLeaf('tab');
+			// workspace.getLeftLeaf
 			await leaf!.setViewState({ type: VIEW_TYPE_EXAMPLE, active: true });
-			workspace.revealLeaf(leaf!);
 		}
+		workspace.revealLeaf(leaf!);
 	}
 
 	async loadSettings() {

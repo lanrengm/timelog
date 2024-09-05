@@ -14,13 +14,12 @@ export class ExampleView extends ItemView {
 	}
 	
 	getDisplayText(): string {
-		return "Example view";
+		return "L R View";
 	}
 	
 	async onOpen() {
-		const container = this.containerEl.children[1];
-		container.empty();
-		container.createEl("h4", { text: "Hello World!"});
+		const { contentEl } = this;
+		contentEl.createEl("h1", { text: 'hello L R' });
 	}
 	
 	async onClose() {}
