@@ -1,43 +1,11 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, setIcon, getIconIds, ItemView, WorkspaceLeaf, View } from 'obsidian';
+import { Editor, MarkdownView, Notice, Plugin, setIcon, getIconIds, ItemView, WorkspaceLeaf, View } from 'obsidian';
 import { clearInterval } from 'timers';
 
-// Remember to rename these classes and interfaces!
-
-const VIEW_TYPE_EXAMPLE = "example-view";
-
-class ExampleView extends ItemView {
-	constructor(leaf: WorkspaceLeaf) {
-		super(leaf);
-	}
-	getViewType() {
-		return VIEW_TYPE_EXAMPLE;
-	}
-	getDisplayText(): string {
-		return "Example view";
-	}
-	async onOpen() {
-		const container = this.containerEl.children[1];
-		container.empty();
-		container.createEl("h4", { text: "Hello World!"});
-	}
-	async onClose() {
-
-	}
-}
-
-interface MyPluginSettings {
-	setting1: string;
-	setting2: string;
-	enableTimer: boolean;
-}
+import { MyPluginSettings, MY_SETTINGS, MySettingTab } from "./src/settings";
+import { MyModal } from "./src/modals";
+import { ExampleView, VIEW_TYPE_EXAMPLE} from "./src/views";
 
 type StatusBarIconButton = HTMLElement;
-
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	setting1: 'setting 1 default',
-	setting2: 'setting 2 default',
-	enableTimer: false,
-}
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
@@ -94,7 +62,7 @@ export default class MyPlugin extends Plugin {
 			id: 'open-sample-modal-simple',
 			name: 'Open sample modal (simple)',
 			callback: () => {
-				new SampleModal(this.app).open();
+				new MyModal(this.app).open();
 			}
 		});
 		// This adds an editor command that can perform some operation on the current editor instance
@@ -117,7 +85,7 @@ export default class MyPlugin extends Plugin {
 					// If checking is true, we're simply "checking" if the command can be run.
 					// If checking is false, then we want to actually perform the operation.
 					if (!checking) {
-						new SampleModal(this.app).open();
+						new MyModal(this.app).open();
 					}
 
 					// This command will only show up in Command Palette when the check function returns true
@@ -127,7 +95,7 @@ export default class MyPlugin extends Plugin {
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(new MySettingTab(this.app, this));
 
 		this.registerView(
 			VIEW_TYPE_EXAMPLE,
@@ -147,9 +115,7 @@ export default class MyPlugin extends Plugin {
 		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
-	onunload() {
-
-	}
+	onunload() {}
 
 	async activateView() {
 		const { workspace } = this.app;
@@ -165,80 +131,10 @@ export default class MyPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign({}, MY_SETTINGS, await this.loadData());
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {titleEl,contentEl} = this;
-		titleEl.setText('Title');
-		contentEl.setText('Woah!');
-		const c1 = contentEl.createDiv();
-		c1.setText('xxx');
-		
-	}
-
-	onClose() {
-		const {titleEl,contentEl} = this;
-		titleEl.empty();
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('xxx')
-			.setDesc('xxx')
-			.addText(text => text
-				.setPlaceholder('Setting 1 placeholder')
-				.setValue(this.plugin.settings.setting1)
-				.onChange(async (value) => {
-					this.plugin.settings.setting1 = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-		.setName('Setting #2')
-		.setDesc('Setting 2 desc.')
-		.addText(text => text
-			.setPlaceholder('Setting 2 placeholder')
-			.setValue(this.plugin.settings.setting2)
-			.onChange(async (value) => {
-				this.plugin.settings.setting2 = value;
-				await this.plugin.saveSettings();
-			}));
-		
-		new Setting(containerEl)
-			.setName('正向计时器')
-			.setDesc('统计工作时长')
-			.addToggle((toggle) => {
-				toggle
-					.setValue(this.plugin.settings.enableTimer)
-					.onChange(async (value) => {
-						this.plugin.settings.enableTimer = value;
-						await this.plugin.saveSettings();
-					});
-			});
 	}
 }

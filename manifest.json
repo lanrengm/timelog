@@ -1,7 +1,7 @@
 {
 	"id": "lanren-plugin",
 	"name": "懒人插件",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"minAppVersion": "1.6.7",
 	"description": "懒人插件",
 	"author": "Lanren",
