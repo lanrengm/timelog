@@ -1,10 +1,10 @@
 {
-	"id": "obsidian-plugin-lanren-develop-tools",
-	"name": "黑曜石开发套件",
+	"id": "plugin-1",
+	"name": "plugin-1",
 	"version": "0.0.4",
 	"minAppVersion": "1.6.7",
-	"description": "黑曜石插件-懒人开发工具套件",
-	"author": "Lanren",
+	"description": "plugin-1",
+	"author": "test",
 	"authorUrl": "https://github.com/lanrengm",
 	"isDesktopOnly": false
 }
