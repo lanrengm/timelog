@@ -17,6 +17,7 @@ export default class MyPlugin extends Plugin {
     this.registerView(MY_VIEW_TYPE, (leaf) => new MyView(leaf));
 
     this.addRibbonIcon('dice', 'new file', (e) => {
+		new Notice('hi');
     });
   }
 
