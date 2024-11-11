@@ -1,146 +1,188 @@
-import { Plugin, ItemView, WorkspaceLeaf, TFile, TFolder, TAbstractFile, Notice, addIcon, setIcon } from "obsidian";
+import { Plugin, FileView, TFile, Notice, Menu, MenuItem, PluginSettingTab, Setting, EventRef, IconName, ButtonComponent, TFolder } from "obsidian";
+import { join } from "path";
 
-import myicon1 from './icons/myicon1.svg';
+import { Settings, SETTINGS } from "./settings";
+import Btn from "./btn.html";
 
-export default class MyPlugin extends Plugin {
+const VIEW_TYPE = "time-log-view";
+const FILE_EXT = "timelog";
+const ICON = "alarm-check";
+const PLUGIN_NAME = "时光日志";
 
-  explorerIcon: HTMLElement | null = null;
-  explorer: MyView | null = null;
-
-  icon1: HTMLElement | null = null;
+export default class TimeLogPlugin extends Plugin {
+  settings: Settings;
+  newFileRibbonIconEl: HTMLElement | null = null;
+  newFileMenuItemRef: EventRef | null = null;
 
   async onload(): Promise<void> {
-    const { workspace } = this.app;
+    await this.loadSettings();
+    this.addSettingTab(new SettingTab(this.app, this));
 
-    this.registerExplorerRibbonIcon();
-    // 注册 View
-    this.registerView(MY_VIEW_TYPE, (leaf) => new MyView(leaf));
+    if (this.settings.enableRibbonIcon) {
+      this.addNewFileRibbonIcon();
+    }
+    if (this.settings.enableFileExplorerMenuItem) {
+      this.addNewFileMenuItem();
+    }
 
-    this.addRibbonIcon('dice', 'new file', (e) => {
-		new Notice('hi');
+    this.registerView(VIEW_TYPE, (leaf) => new TimeLogView(leaf));
+    try {
+      this.registerExtensions([FILE_EXT], VIEW_TYPE);
+    } catch (error) {
+      const err = `${PLUGIN_NAME}插件尝试使用 ${FILE_EXT} 作为${PLUGIN_NAME}文件的扩展名，但此扩展名已被其它插件占用，请在${PLUGIN_NAME}插件设置中更改${PLUGIN_NAME}文件的扩展名，然后重新加载${PLUGIN_NAME}插件`;
+      console.error(err);
+      new Notice(err, 20000);
+    }
+  }
+
+  addNewFileRibbonIcon(): void {
+    this.newFileRibbonIconEl = this.addRibbonIcon(ICON, `新建${PLUGIN_NAME}`, async (evt) => {
+      let newFile = `${PLUGIN_NAME}.timelog`;
+      try {
+        await this.app.vault.create(newFile, "");
+      } catch (error) {
+        new Notice(`${newFile} 已经存在`);
+      }
     });
+  }
+
+  removeNewFileRibbonIcon(): void {
+    this.newFileRibbonIconEl?.remove();
+  }
+
+  addNewFileMenuItem(): void {
+    this.newFileMenuItemRef = this.app.workspace.on("file-menu", (menu: Menu, file) => {
+      menu.addItem((item: MenuItem) => {
+        item.setTitle(`新建${PLUGIN_NAME}`);
+        item.setIcon("alarm-check");
+        item.onClick(async (evt) => {
+          const fileName = `${PLUGIN_NAME}.timelog`;
+          const fileDir = file instanceof TFolder ? file.path : file.parent?.path ?? "";
+          const filePath = join(fileDir, fileName);
+          try {
+            await this.app.vault.create(filePath, "");
+          } catch (error) {
+            new Notice(`${filePath} 已经存在`);
+          }
+        });
+      });
+    });
+    this.registerEvent(this.newFileMenuItemRef);
+  }
+
+  removeNewFileMenuItem(): void {
+    if (this.newFileMenuItemRef) this.app.workspace.offref(this.newFileMenuItemRef);
   }
 
   onunload(): void {
-    if (this.explorerIcon) {
-      this.explorerIcon.remove();
-      this.explorerIcon = null;
-    }
-    if (this.icon1) {
-      this.icon1.remove();
-      this.icon1 = null;
-    }
+    this.removeNewFileRibbonIcon();
+    this.removeNewFileMenuItem();
   }
 
-  registerExplorerRibbonIcon() {
-    addIcon('myicon1', myicon1);
-    this.explorerIcon = this.addRibbonIcon('myicon1', 'open my explorer', (e) => this.showExplorer());
+  async loadSettings() {
+    this.settings = Object.assign({}, SETTINGS, await this.loadData());
   }
 
-  async showExplorer() {
-    const { workspace } = this.app;
-    // 显示 View
-    let leaf: WorkspaceLeaf | null = null;
-    const leaves = workspace.getLeavesOfType(MY_VIEW_TYPE);
-    if (leaves.length > 0) {
-      leaf = leaves[0];
-    } else {
-      leaf = workspace.getLeftLeaf(false);
-      await leaf!.setViewState({ type: MY_VIEW_TYPE, active: true });
-    }
-    workspace.revealLeaf(leaf!);
+  async saveSettings() {
+    await this.saveData(this.settings);
   }
 }
 
-const MY_VIEW_TYPE = "my-explorer";
+class SettingTab extends PluginSettingTab {
+  plugin: TimeLogPlugin;
 
-class MyView extends ItemView {
-  navigation: boolean = false;
-  // 记录当前选中的文件或文件夹
-  // 实现两次点击同一个文件夹展开
-  focusedEl: HTMLElement | null = null;
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
 
-  getViewType(): string {
-    return MY_VIEW_TYPE;
-  }
-
-  getDisplayText(): string {
-    return "My Explorer";
-  }
-
-  async onOpen(): Promise<void> {
-    const { contentEl } = this;
-
-    this.showFolderToEl('/', contentEl);
-  }
-
-  async onClose(): Promise<void> {
-    this.containerEl.empty();
-  }
-
-  showFolderToEl(path: string, el: HTMLElement) {
-    const { vault } = this.app;
-
-    let root = vault.getFolderByPath(path);
-    // 分离 folder 和 file
-    let folderList: Array<TAbstractFile> = [];
-    let fileList: Array<TAbstractFile> = [];
-    root?.children.forEach((t) => {
-      if (t instanceof TFolder) {
-        folderList.push(t);
-      } else {
-        fileList.push(t);
-      }
-    });
-    folderList.sort();
-    fileList.sort();
-
-    // nav-folder
-    folderList.forEach(t => {
-      let navFolder = el.createDiv({ cls: 'tree-item nav-folder is-collapsed' });
-      let navFolderTitle = navFolder.createDiv({ cls: 'tree-item-self nav-folder-title' });
-      let navFolderCollapseIndicator = navFolderTitle.createDiv({ cls: 'tree-item-icon nav-folder-collapse-indicator' });
-      setIcon(navFolderCollapseIndicator, 'myicon1');
-      let navFolderTitleContent = navFolderTitle.createDiv({
-        text: t.name,
-        cls: 'tree-item-inner nav-folder-title-content'
-      });
-
-      // 点击目录的事件
-      navFolder.onClickEvent(evt => {
-        if (this.focusedEl === navFolderTitle) {
-          // 点击已选中文件夹, 等同于双击
-          console.log(t.name);
+    const set1 = new Setting(containerEl);
+    set1.setName("工具栏按钮");
+    set1.setDesc(`在工具栏添加一个按钮，按钮的功能是在仓库根目录新建一个${PLUGIN_NAME}文件`);
+    set1.addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.enableRibbonIcon);
+      toggle.onChange(async (value) => {
+        this.plugin.settings.enableRibbonIcon = value;
+        await this.plugin.saveSettings();
+        if (value) {
+          this.plugin.addNewFileRibbonIcon();
         } else {
-          // 点击新的文件夹
-          // 取消其它文件或目录的选中
-          this.focusedEl?.removeClasses(['is-active', 'has-focus']);
-          // 选中当前目录
-          navFolderTitle.addClasses(['is-active', 'has-focus']);
-          this.focusedEl = navFolderTitle;
+          this.plugin.removeNewFileRibbonIcon();
         }
       });
     });
 
-    // nav-file
-    fileList.forEach(t => {
-      let navFile = el.createDiv({ cls: 'tree-item nav-file' });
-      let navFileTitle = navFile.createDiv({ cls: 'tree-item-self nav-file-title' });
-      let navFileTitleContent = navFileTitle.createDiv({
-        text: t.name,
-        cls: 'tree-item-inner nav-file-title-content'
+    const set2 = new Setting(containerEl);
+    set2.setName("文件管理器右键菜单项");
+    set2.setDesc(`在文件管理器右键菜单添加一项，菜单项的功能是在指定目录新建一个时间${PLUGIN_NAME}文件`);
+    set2.addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.enableFileExplorerMenuItem);
+      toggle.onChange(async (value) => {
+        this.plugin.settings.enableFileExplorerMenuItem = value;
+        await this.plugin.saveSettings();
+        if (value) {
+          this.plugin.addNewFileMenuItem();
+        } else {
+          this.plugin.removeNewFileMenuItem();
+        }
       });
+    });
+  }
+}
 
-      // 点击文件的事件
-      navFile.onClickEvent(evt => {
-        // is-active 是外边框变化，可以用键盘方向键控制，作用是光标指示器。
-        // has-focus 是背景变化，鼠标单击选中，或方向键切换is-active后按回车选中，作用是指示当前正在编辑的文件。
-        // 取消其它文件或目录的选中
-        this.focusedEl?.removeClasses(['is-active', 'has-focus']);
-        // 选中当前文件
-        navFileTitle.addClasses(['is-active', 'has-focus']);
-        this.focusedEl = navFileTitle;
+type TimeLogTime = string;
+type TimeLog = [flag: "starting" | "end", time: TimeLogTime, title: string];
+
+class TimeLogView extends FileView {
+  navigation: boolean = true;
+  allowNoFile: boolean = false;
+  content: string;
+  txt: HTMLElement;
+
+  async onOpen(): Promise<void> {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+
+  async onLoadFile(file: TFile): Promise<void> {
+    const contentEl = this.contentEl;
+    const ctlEl = contentEl.createDiv({ cls: "timelog-ctl" });
+    const ctxEl = (this.txt = contentEl.createDiv({ cls: "timelog-ctx" }));
+
+    const btnMain = ctlEl.createEl("button", { text: `开始/继续/暂停/结束` });
+    ctlEl.clientWidth;
+    const observer = new ResizeObserver((entries) => {
+      const length = entries[0].contentRect.width * 0.6;
+      btnMain.setCssStyles({
+        width: `${length}px`,
+        height: `${length}px`,
+        borderRadius: `${length}px`,
       });
-    })
+    });
+    observer.observe(ctlEl);
+  }
+
+  async refresh(file: TFile) {
+    this.content = await this.app.vault.read(file);
+    this.txt.innerText = this.content;
+  }
+
+  async onClose(): Promise<void> {
+    this.contentEl.empty();
+  }
+
+  canAcceptExtension(extension: string): boolean {
+    return extension == FILE_EXT;
+  }
+
+  getViewType(): string {
+    return VIEW_TYPE;
+  }
+
+  getDisplayText() {
+    return PLUGIN_NAME;
+  }
+
+  getIcon(): IconName {
+    return ICON;
   }
 }

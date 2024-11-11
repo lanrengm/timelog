@@ -1,10 +1,10 @@
 {
-	"id": "plugin-1",
-	"name": "plugin-1",
+	"id": "time-log",
+	"name": "Time Log",
 	"version": "0.0.4",
 	"minAppVersion": "1.6.7",
-	"description": "plugin-1",
-	"author": "test",
+	"description": "Time Log",
+	"author": "lanren",
 	"authorUrl": "https://github.com/lanrengm",
 	"isDesktopOnly": false
 }

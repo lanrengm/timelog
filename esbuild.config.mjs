@@ -14,7 +14,8 @@ const context = await esbuild.context({
 	sourcemap: dev ? "inline": false,
 	treeShaking: true,
 	loader: {
-		'.svg': 'text'
+		'.svg': 'text',
+		'.html': 'text',
 	},
 	external: [
 		"obsidian",

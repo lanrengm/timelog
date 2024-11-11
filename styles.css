@@ -1,0 +1,21 @@
+
+.timelog-ctx {
+  width: 100%;
+  height: auto;
+}
+.timelog-ctl {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.timelog-btn {
+  flex: auto;
+  min-width: 150px;
+  max-width: 300px;
+}
+
+.timelog-mainbtn {
+  background-color: white;
+  border-radius: 100px;
+}
