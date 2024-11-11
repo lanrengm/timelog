@@ -1,42 +1,46 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import fs from 'fs';
 
 const dev = (process.argv[2] === "dev");
 
 const context = await esbuild.context({
-	entryPoints: ["src/main.ts"],
-	outfile: "main.js",
-	bundle: true,
-	format: "cjs",
-	target: "es2018",
-	logLevel: "info",
-	sourcemap: dev ? "inline": false,
-	treeShaking: true,
-	loader: {
-		'.svg': 'text',
-		'.html': 'text',
-	},
-	external: [
-		"obsidian",
-		"electron",
-		"@codemirror/autocomplete",
-		"@codemirror/collab",
-		"@codemirror/commands",
-		"@codemirror/language",
-		"@codemirror/lint",
-		"@codemirror/search",
-		"@codemirror/state",
-		"@codemirror/view",
-		"@lezer/common",
-		"@lezer/highlight",
-		"@lezer/lr",
-		...builtins],
+  entryPoints: ["src/main.ts"],
+  outfile: dev ? "main.js" : "dist/main.js",
+  bundle: true,
+  format: "cjs",
+  target: "es2018",
+  logLevel: "info",
+  sourcemap: dev ? "inline" : false,
+  minify: dev ? false : true,
+  treeShaking: dev ? false : true,
+  loader: {
+    '.svg': 'text',
+    '.html': 'text',
+  },
+  external: [
+    "obsidian",
+    "electron",
+    "@codemirror/autocomplete",
+    "@codemirror/collab",
+    "@codemirror/commands",
+    "@codemirror/language",
+    "@codemirror/lint",
+    "@codemirror/search",
+    "@codemirror/state",
+    "@codemirror/view",
+    "@lezer/common",
+    "@lezer/highlight",
+    "@lezer/lr",
+    ...builtins],
 });
 
 if (dev) {
-	await context.watch();
+  await context.watch();
 } else {
-	await context.rebuild();
-	process.exit(0);
+  await context.rebuild();
+  fs.copyFileSync('./manifest.json', './dist/manifest.json');
+  if (fs.existsSync('./styles.css')) fs.copyFileSync('./styles.css', './dist/styles.css');
+  process.exit(0);
 }
