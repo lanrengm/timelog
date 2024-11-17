@@ -19,6 +19,9 @@ const context = await esbuild.context({
     '.svg': 'text',
     '.html': 'text',
   },
+  define: {
+    DEV: dev ? "null" : "true"
+  },
   external: [
     "obsidian",
     "electron",

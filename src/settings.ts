@@ -15,10 +15,18 @@ export const DEFAULT_SETTINGS: Settings = {
   enableFileExplorerMenuItem: true,
 };
 
-export interface PluginData {
-  key1: string;
+export interface Plan {
+  id: string,
+  name: string,
 }
 
-export const DEFAULT_PLUGIN_DATA: PluginData = {
-  key1: 'hi',
+export interface FileData {
+  plans: Plan[];
 }
+
+export const DEFAULT_FILE_DATA: FileData = {
+  plans: [
+    { id: "001", name: "背单词"}
+  ]
+}
+

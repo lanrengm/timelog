@@ -2,7 +2,7 @@ import { Plugin, Notice, Menu, MenuItem, PluginSettingTab, Setting, EventRef, TF
 
 import {
   Settings,
-  PluginData,
+  FileData,
   DEFAULT_SETTINGS,
   PLUGIN_VIEW_TYPE,
   PLUGIN_FILE_EXT,
@@ -10,18 +10,18 @@ import {
   PLUGIN_NAME,
   PLUGIN_FILE_EXT_ERR,
   PLUGIN_VIEW_TYPE_ERR,
-  DEFAULT_PLUGIN_DATA,
+  DEFAULT_FILE_DATA,
 } from "./settings";
 import { TimeLogView } from "./views/view";
 
 export default class TimeLogPlugin extends Plugin {
   settings: Settings;
-  data: PluginData;
   // 创建新的时间日志文件
   newFileRibbonIcon: HTMLElement | null = null;
   newFileMenuItemRef: EventRef | null = null;
 
   async onload(): Promise<void> {
+    DEV ?? console.log(`TimeLogPlugin onload()`);
     await this.loadSettings();
     this.addSettingTab(new SettingTab(this.app, this));
     if (this.settings.enableRibbonIcon) this.addNewFileRibbonIcon();
@@ -41,6 +41,7 @@ export default class TimeLogPlugin extends Plugin {
   }
 
   onunload(): void {
+    DEV ?? console.log(`TimeLogPlugin onunload()`);
     this.removeNewFileRibbonIcon();
     this.removeNewFileMenuItem();
   }
@@ -53,19 +54,8 @@ export default class TimeLogPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  async loadPluginData(file: TFile): Promise<void> {
-    const ctt = await this.app.vault.read(file);
-    const data = JSON.parse(ctt);
-    this.data = Object.assign({}, DEFAULT_PLUGIN_DATA, data);
-  }
-
-  async savePluginData(file: TFile): Promise<void> {
-    const ctt = JSON.stringify(this.data);
-    await this.app.vault.modify(file, ctt);
-  }
-
   newFile(path: string): void {
-    this.app.vault.create(path, "{}").catch(err => new Notice(`${path} 已经存在`));
+    this.app.vault.create(path, JSON.stringify(DEFAULT_FILE_DATA)).catch(err => new Notice(`${path} 已经存在`));
   }
 
   addNewFileRibbonIcon(): void {
