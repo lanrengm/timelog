@@ -1,4 +1,19 @@
-import { App, FileView, Notice, TFile, IconName, WorkspaceLeaf, Setting, ButtonComponent, Component, Menu, Modal } from "obsidian";
+import { observable, action, autorun, flow, runInAction } from "mobx";
+import {
+  App,
+  FileView,
+  Notice,
+  TFile,
+  IconName,
+  WorkspaceLeaf,
+  Setting,
+  ButtonComponent,
+  Component,
+  Menu,
+  Modal,
+  MomentFormatComponent,
+  moment,
+} from "obsidian";
 
 import TimeLogPlugin from "../main";
 import { PLUGIN_VIEW_TYPE, PLUGIN_FILE_EXT, PLUGIN_ICON, PLUGIN_NAME, Plan, FileData, DEFAULT_FILE_DATA } from "../settings";
@@ -11,9 +26,11 @@ export class TimeLogView extends FileView {
   navigation: boolean = true;
   allowNoFile: boolean = false;
   file: TFile;
-  fileData: FileData;
+  fileData: FileData = observable(DEFAULT_FILE_DATA);
   ctlEl: HTMLElement;
   ctxEl: HTMLElement;
+  // 计时器，用来刷新时间
+  timer = observable({ value: "" });
 
   constructor(leaf: WorkspaceLeaf, plugin: TimeLogPlugin) {
     super(leaf);
@@ -47,6 +64,15 @@ export class TimeLogView extends FileView {
 
   async onOpen(): Promise<void> {
     DEV ?? console.log(`onOpen(${PLUGIN_VIEW_TYPE})`);
+    
+    this.registerInterval(
+      window.setInterval(() => {
+        DEV ?? console.log(`计时器`, this);
+        runInAction(() => {
+          this.timer.value = moment().format("YYYY-MM-DD HH:mm:ss");
+        });
+      }, 1000)
+    );
 
     // 监听 ctlEl 的宽度，动态调整内边距
     new ResizeObserver(entries => {
@@ -68,39 +94,48 @@ export class TimeLogView extends FileView {
         this.ctxEl.setCssStyles(css);
       }
     }).observe(this.ctlEl);
-  }
 
-  async onLoadFile(file: TFile): Promise<void> {
-    DEV ?? console.log(`onloadFile(${file.name})`);
-    this.file = file;
-    await this.loadFileData();
-
-    this.refreshUI();
-  }
-
-  async refreshUI() {
-    const plans = this.fileData.plans;
-
-    this.ctlEl.empty();
-    new Setting(this.ctlEl).setName("选择计划").addDropdown(dd => {
-      plans.forEach(plan => dd.addOption(plan.id, plan.name));
+    const selectPlan = new Setting(this.ctlEl).setName("选择计划");
+    selectPlan.addDropdown(dd => {
+      autorun(() => {
+        dd.selectEl.empty();
+        this.fileData.plans.forEach(plan => dd.addOption(plan.id, plan.name));
+        const value = dd.getValue();
+        selectPlan.setDesc(`编号: ${value}, 名称: ${this.fileData.plans.find(plan => plan.id === value)?.name}`);
+      });
+      dd.onChange(value => {
+        selectPlan.setDesc(`编号: ${value}, 名称: ${this.fileData.plans.find(plan => plan.id === value)?.name}`);
+      });
     });
-    new Setting(this.ctlEl).setName(`${Date()}:`).addButton(btn => {
+    const startEl = new Setting(this.ctlEl);
+    autorun(()=>{
+      startEl.setName(`${this.timer.value}`);
+    });
+    startEl.addButton(btn => {
       btn.setButtonText(`现在开始`).onClick(evt => {});
     });
 
-    this.ctxEl.empty();
+    // 监听数据，刷新表格
     const table = this.ctxEl.createEl("table");
     table.createCaption().setText("计划");
     const headTr = table.createTHead().createEl("tr");
     headTr.createEl("th").setText("编号");
     headTr.createEl("th").setText("名称");
     const body = table.createTBody();
-    plans.forEach(plan => {
-      const bodyTr = body.createEl("tr");
-      bodyTr.createEl("td").setText(plan.id);
-      bodyTr.createEl("td").setText(plan.name);
+    autorun(() => {
+      body.empty();
+      this.fileData.plans.forEach(plan => {
+        const bodyTr = body.createEl("tr");
+        bodyTr.createEl("td").setText(plan.id);
+        bodyTr.createEl("td").setText(plan.name);
+      });
     });
+  }
+
+  async onLoadFile(file: TFile): Promise<void> {
+    DEV ?? console.log(`onloadFile(${file.name})`);
+    this.file = file;
+    await this.loadFileData();
   }
 
   async onUnloadFile(file: TFile): Promise<void> {
@@ -129,9 +164,12 @@ export class TimeLogView extends FileView {
     return PLUGIN_ICON;
   }
 
-  async loadFileData(): Promise<void> {
+  async loadFileData() {
     const content = await this.app.vault.read(this.file);
-    this.fileData = Object.assign({}, DEFAULT_FILE_DATA, JSON.parse(content));
+    const fileData: FileData = Object.assign({}, DEFAULT_FILE_DATA, JSON.parse(content));
+    runInAction(() => {
+      Object.assign(this.fileData, fileData);
+    });
   }
 
   async saveFileData(): Promise<void> {
@@ -190,7 +228,6 @@ class NewPlanModal extends Modal {
             } else {
               this.view.fileData.plans.push(plan);
               await this.view.saveFileData();
-              await this.view.refreshUI();
               this.close();
             }
           }
