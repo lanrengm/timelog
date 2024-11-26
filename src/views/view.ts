@@ -1,3 +1,4 @@
+import * as d3 from "d3";
 import { observable, action, autorun, flow, runInAction, computed } from "mobx";
 import {
   App,
@@ -104,6 +105,9 @@ export class TimelogView extends FileView {
         this.ctlEl.setCssStyles(css);
         this.ctxEl.setCssStyles(css);
       }
+      runInAction(() => {
+        this.ctlWidth.value = entries[0].contentRect.width;
+      });
     }).observe(this.ctlEl);
 
     const selectPlan = new Setting(this.ctlEl).setName("选择计划");
@@ -154,10 +158,11 @@ export class TimelogView extends FileView {
       });
     });
 
+    // this.ctxEl.createEl("hr");
+    // this.showPlans(/* this.ctxEl, this.timelog.plans */);
     this.ctxEl.createEl("hr");
-    this.showPlans(/* this.ctxEl, this.timelog.plans */);
-    this.ctxEl.createEl("hr");
-    this.showRecordsTable(/* this.ctxEl, this.timelog.records */);
+    this.showRecordsChart();
+    // this.showRecordsTable(/* this.ctxEl, this.timelog.records */);
   }
 
   async onClose(): Promise<void> {
@@ -226,7 +231,28 @@ export class TimelogView extends FileView {
    * 监听数据，刷新记录视图（可视化图形）
    */
   showRecordsChart(): void {
+    const mounted = this.ctxEl.createDiv();
+    autorun(()=>{
+      mounted.empty();
+      const width = this.ctlWidth.value;
+      const height = 200;
+      const margin = { top: 30, right: 30, bottom: 30, left: 30 };
+      const innerW = width - margin.left - margin.right;
+      const innerH = height - margin.top - margin.bottom;
+      const svg = d3.select(mounted).append("svg").attr("width", width).attr("height", height);
+      const inner = svg.append("g").attr("transform", `translate(${margin.left}, ${margin.top})`);
+    
+      const xScale = d3.scaleTime().domain([moment().startOf('day'), moment().endOf('day')]).range([0, innerW]);
+      // xScale.ticks(d3.utcMinute.every(15)!);
+      const xAxis = d3.axisBottom(xScale).tickValues(xScale.ticks(d3.timeHour.every(1)!)).tickFormat(d3.timeFormat('%H'));
+      inner.append("g").attr("transform", `translate(0, ${innerH})`).call(xAxis);
+    
+      const yScale = d3.scaleLinear().domain([0, 10]).range([0, innerH]);
+      inner.append("g").call(d3.axisLeft(yScale));
+      
+    });
 
+    // mounted.innerHTML = 'hi';
   }
 
   /**
@@ -257,6 +283,11 @@ export class TimelogView extends FileView {
    * 选中的计划
    */
   selectedPlanId = observable({ value: "" });
+
+  /**
+   * 内容区宽度
+   */
+  ctlWidth = observable({ value: 0 });
 
   async loadTimelog() {
     const content = await this.app.vault.read(this.file);
