@@ -3,7 +3,7 @@ import { Plugin, Notice, Menu, MenuItem, PluginSettingTab, Setting, EventRef, TF
 
 import {
   Settings,
-  FileData,
+  Timelog,
   DEFAULT_SETTINGS,
   PLUGIN_VIEW_TYPE,
   PLUGIN_FILE_EXT,
@@ -13,9 +13,9 @@ import {
   PLUGIN_VIEW_TYPE_ERR,
   DEFAULT_FILE_DATA,
 } from "./settings";
-import { TimeLogView } from "./views/view";
+import { TimelogView } from "./views/view";
 
-export default class TimeLogPlugin extends Plugin {
+export default class TimelogPlugin extends Plugin {
   settings: Settings;
   // 创建新的时间日志文件
   newFileRibbonIcon: HTMLElement | null = null;
@@ -28,7 +28,7 @@ export default class TimeLogPlugin extends Plugin {
     if (this.settings.enableRibbonIcon) this.addNewFileRibbonIcon();
     if (this.settings.enableFileExplorerMenuItem) this.addNewFileMenuItem();
     try {
-      this.registerView(PLUGIN_VIEW_TYPE, leaf => new TimeLogView(leaf, this));
+      this.registerView(PLUGIN_VIEW_TYPE, leaf => new TimelogView(leaf, this));
     } catch (error) {
       new Notice(PLUGIN_VIEW_TYPE_ERR);
       console.error(PLUGIN_VIEW_TYPE_ERR);
@@ -89,7 +89,7 @@ export default class TimeLogPlugin extends Plugin {
 }
 
 class SettingTab extends PluginSettingTab {
-  plugin: TimeLogPlugin;
+  plugin: TimelogPlugin;
 
   display(): void {
     this.containerEl.empty();

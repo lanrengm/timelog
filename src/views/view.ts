@@ -1,4 +1,4 @@
-import { observable, action, autorun, flow, runInAction } from "mobx";
+import { observable, action, autorun, flow, runInAction, computed } from "mobx";
 import {
   App,
   FileView,
@@ -15,31 +15,28 @@ import {
   moment,
 } from "obsidian";
 
-import TimeLogPlugin from "../main";
-import { PLUGIN_VIEW_TYPE, PLUGIN_FILE_EXT, PLUGIN_ICON, PLUGIN_NAME, Plan, FileData, DEFAULT_FILE_DATA } from "../settings";
+import TimelogPlugin from "../main";
+import { PLUGIN_VIEW_TYPE, PLUGIN_FILE_EXT, PLUGIN_ICON, PLUGIN_NAME, Plan, Timelog, DEFAULT_FILE_DATA, Record, DATE_TIME_FORMAT } from "../settings";
 
-type TimeLogTime = string;
-type TimeLog = [flag: "starting" | "end", time: TimeLogTime, title: string];
-
-export class TimeLogView extends FileView {
-  plugin: TimeLogPlugin;
+export class TimelogView extends FileView {
   navigation: boolean = true;
   allowNoFile: boolean = false;
   file: TFile;
-  fileData: FileData = observable(DEFAULT_FILE_DATA);
-  ctlEl: HTMLElement;
-  ctxEl: HTMLElement;
-  // 计时器，用来刷新时间
-  timer = observable({ value: "" });
 
-  constructor(leaf: WorkspaceLeaf, plugin: TimeLogPlugin) {
-    super(leaf);
-    this.plugin = plugin;
-    const ctlEl = this.contentEl.createDiv({ cls: "timelog-ctl" });
-    const ctxEl = this.contentEl.createDiv({ cls: "timelog-ctx" });
-    this.ctlEl = ctlEl;
-    this.ctxEl = ctxEl;
-    DEV ?? console.log(`new TimeLogView(${leaf}, ${plugin})`);
+  canAcceptExtension(extension: string): boolean {
+    return extension == PLUGIN_FILE_EXT;
+  }
+
+  getViewType(): string {
+    return PLUGIN_VIEW_TYPE;
+  }
+
+  getDisplayText() {
+    return PLUGIN_NAME;
+  }
+
+  getIcon(): IconName {
+    return PLUGIN_ICON;
   }
 
   onPaneMenu(menu: Menu, source: "more-options" | "tab-header" | string) {
@@ -62,12 +59,26 @@ export class TimeLogView extends FileView {
     });
   }
 
+  plugin: TimelogPlugin;
+  ctlEl: HTMLElement;
+  ctxEl: HTMLElement;
+
+  constructor(leaf: WorkspaceLeaf, plugin: TimelogPlugin) {
+    super(leaf);
+    this.plugin = plugin;
+    const ctlEl = this.contentEl.createDiv({ cls: "timelog-ctl" });
+    const ctxEl = this.contentEl.createDiv({ cls: "timelog-ctx" });
+    this.ctlEl = ctlEl;
+    this.ctxEl = ctxEl;
+    DEV ?? console.log(`new TimeLogView(${leaf}, ${plugin})`);
+  }
+
   async onOpen(): Promise<void> {
     DEV ?? console.log(`onOpen(${PLUGIN_VIEW_TYPE})`);
-    
+
     this.registerInterval(
       window.setInterval(() => {
-        DEV ?? console.log(`计时器`, this);
+        // DEV ?? console.log(`计时器`, this);
         runInAction(() => {
           this.timer.value = moment().format("YYYY-MM-DD HH:mm:ss");
         });
@@ -98,49 +109,55 @@ export class TimeLogView extends FileView {
     const selectPlan = new Setting(this.ctlEl).setName("选择计划");
     selectPlan.addDropdown(dd => {
       autorun(() => {
+        DEV ?? console.log(`${this.timelog.plans.length}`);
         dd.selectEl.empty();
-        this.fileData.plans.forEach(plan => dd.addOption(plan.id, plan.name));
+        this.timelog.plans.forEach(plan => dd.addOption(plan.id, plan.name));
         const value = dd.getValue();
-        selectPlan.setDesc(`编号: ${value}, 名称: ${this.fileData.plans.find(plan => plan.id === value)?.name}`);
+        selectPlan.setDesc(`编号: ${value}, 名称: ${this.timelog.plans.find(plan => plan.id === value)?.name}`);
+        // 切换日志文件时更新
+        runInAction(() => {
+          DEV ?? console.log(`${this.selectedPlanId.value}`);
+          this.selectedPlanId.value = value;
+        });
       });
       dd.onChange(value => {
-        selectPlan.setDesc(`编号: ${value}, 名称: ${this.fileData.plans.find(plan => plan.id === value)?.name}`);
+        selectPlan.setDesc(`编号: ${value}, 名称: ${this.timelog.plans.find(plan => plan.id === value)?.name}`);
+        runInAction(() => {
+          this.selectedPlanId.value = value;
+          DEV ?? console.log(`${this.selectedPlanId.value}`);
+        });
       });
     });
     const startEl = new Setting(this.ctlEl);
-    autorun(()=>{
-      startEl.setName(`${this.timer.value}`);
+    autorun(() => {
+      if (this.isDoing.get()) {
+        const startTime = moment(this.timelog.records.last()!.start, DATE_TIME_FORMAT);
+        const du = moment.duration(moment(this.timer.value, DATE_TIME_FORMAT).diff(startTime));
+        const year = du.get("years").toString().padStart(4, "0");
+        const month = du.get("months").toString().padStart(2, "0");
+        const day = du.get("days").toString().padStart(2, "0");
+        const hour = du.get("hours").toString().padStart(2, "0");
+        const minute = du.get("minutes").toString().padStart(2, "0");
+        const second = du.get("seconds").toString().padStart(2, "0");
+        startEl.setName(`${year}-${month}-${day} ${hour}:${minute}:${second}`);
+      } else {
+        startEl.setName(`${this.timer.value}`);
+      }
     });
     startEl.addButton(btn => {
-      btn.setButtonText(`现在开始`).onClick(evt => {});
-    });
-
-    // 监听数据，刷新表格
-    const table = this.ctxEl.createEl("table");
-    table.createCaption().setText("计划");
-    const headTr = table.createTHead().createEl("tr");
-    headTr.createEl("th").setText("编号");
-    headTr.createEl("th").setText("名称");
-    const body = table.createTBody();
-    autorun(() => {
-      body.empty();
-      this.fileData.plans.forEach(plan => {
-        const bodyTr = body.createEl("tr");
-        bodyTr.createEl("td").setText(plan.id);
-        bodyTr.createEl("td").setText(plan.name);
+      autorun(() => {
+        if (this.isDoing.get()) {
+          btn.setButtonText(`现在结束`).onClick(() => this.stopPlan());
+        } else {
+          btn.setButtonText(`现在开始`).onClick(() => this.startPlan());
+        }
       });
     });
-  }
 
-  async onLoadFile(file: TFile): Promise<void> {
-    DEV ?? console.log(`onloadFile(${file.name})`);
-    this.file = file;
-    await this.loadFileData();
-  }
-
-  async onUnloadFile(file: TFile): Promise<void> {
-    DEV ?? console.log(`onUnloadFile(${file.name})`);
-    // 切换时光日志时触发
+    this.ctxEl.createEl("hr");
+    this.showPlans(/* this.ctxEl, this.timelog.plans */);
+    this.ctxEl.createEl("hr");
+    this.showRecordsTable(/* this.ctxEl, this.timelog.records */);
   }
 
   async onClose(): Promise<void> {
@@ -148,40 +165,141 @@ export class TimeLogView extends FileView {
     // 关闭标签页时触发
   }
 
-  canAcceptExtension(extension: string): boolean {
-    return extension == PLUGIN_FILE_EXT;
+  async onLoadFile(file: TFile): Promise<void> {
+    DEV ?? console.log(`onloadFile(${file.name})`);
+    this.file = file;
+    await this.loadTimelog();
   }
 
-  getViewType(): string {
-    return PLUGIN_VIEW_TYPE;
+  async onUnloadFile(file: TFile): Promise<void> {
+    DEV ?? console.log(`onUnloadFile(${file.name})`);
+    // 切换时光日志时触发
   }
 
-  getDisplayText() {
-    return PLUGIN_NAME;
-  }
-
-  getIcon(): IconName {
-    return PLUGIN_ICON;
-  }
-
-  async loadFileData() {
-    const content = await this.app.vault.read(this.file);
-    const fileData: FileData = Object.assign({}, DEFAULT_FILE_DATA, JSON.parse(content));
-    runInAction(() => {
-      Object.assign(this.fileData, fileData);
+  /**
+   * 监听数据，刷新计划视图（表格视图）
+   */
+  showPlans(): void {
+    const mounted: HTMLElement = this.ctxEl;
+    //
+    const table = mounted.createEl("table");
+    table.createCaption().setText("计划");
+    const headTr = table.createTHead().createEl("tr");
+    headTr.createEl("th").setText("编号");
+    headTr.createEl("th").setText("名称");
+    const body = table.createTBody();
+    autorun(() => {
+      body.empty();
+      this.timelog.plans.forEach(plan => {
+        const bodyTr = body.createEl("tr");
+        bodyTr.createEl("td").setText(plan.id);
+        bodyTr.createEl("td").setText(plan.name);
+      });
     });
   }
 
-  async saveFileData(): Promise<void> {
-    const content = JSON.stringify(this.fileData);
+  /**
+   * 监听数据，刷新记录视图（表格形式）
+   */
+  showRecordsTable(): void {
+    const mounted: HTMLElement = this.ctxEl;
+    //
+    const table = mounted.createEl("table");
+    table.createCaption().setText("记录");
+    const headTr = table.createTHead().createEl("tr");
+    headTr.createEl("th").setText("开始时间");
+    headTr.createEl("th").setText("结束时间");
+    headTr.createEl("th").setText("ID");
+    const body = table.createTBody();
+    autorun(() => {
+      body.empty();
+      this.timelog.records.forEach(record => {
+        const bodyTr = body.createEl("tr");
+        bodyTr.createEl("td").setText(record.start);
+        bodyTr.createEl("td").setText(record.stop);
+        bodyTr.createEl("td").setText(record.id);
+      });
+    });
+  }
+
+  /**
+   * 监听数据，刷新记录视图（可视化图形）
+   */
+  showRecordsChart(): void {
+
+  }
+
+  /**
+   * 计时器，用来刷新时间
+   */
+  timer = observable({ value: "" });
+
+  /**
+   * 时间日志文件数据
+   */
+  timelog: Timelog = observable(DEFAULT_FILE_DATA);
+
+  /**
+   * 判断当前视图是否正在执行计划
+   */
+  readonly isDoing = computed(() => {
+    const records = this.timelog.records;
+    if (records.length !== 0) {
+      const last = records.last()!;
+      if (last.stop === "") {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  /**
+   * 选中的计划
+   */
+  selectedPlanId = observable({ value: "" });
+
+  async loadTimelog() {
+    const content = await this.app.vault.read(this.file);
+    const fileData: Timelog = Object.assign({}, DEFAULT_FILE_DATA, JSON.parse(content));
+    runInAction(() => {
+      Object.assign(this.timelog, fileData);
+    });
+  }
+
+  async saveTimelog(): Promise<void> {
+    const content = JSON.stringify(this.timelog);
     await this.app.vault.modify(this.file, content);
+  }
+
+  async startPlan(): Promise<void> {
+    DEV ?? console.log(this.isDoing.get());
+    if (this.isDoing.get()) {
+      throw Error("无法开始计划，请先停止当前计划！");
+    } else {
+      const start = moment().format(DATE_TIME_FORMAT);
+      const newRecord: Record = { start: start, stop: "", id: this.selectedPlanId.value };
+      runInAction(() => {
+        this.timelog.records.push(newRecord);
+      });
+      await this.saveTimelog();
+    }
+  }
+
+  async stopPlan(): Promise<void> {
+    if (this.isDoing.get()) {
+      const stop = moment().format(DATE_TIME_FORMAT);
+      runInAction(() => {
+        this.timelog.records.last()!.stop = stop;
+      });
+      await this.saveTimelog();
+    }
   }
 }
 
 class NewPlanModal extends Modal {
-  view: TimeLogView;
+  view: TimelogView;
 
-  constructor(app: App, view: TimeLogView) {
+  constructor(app: App, view: TimelogView) {
     super(app);
     this.view = view;
   }
@@ -221,13 +339,15 @@ class NewPlanModal extends Modal {
           } else if (plan.name === "") {
             confirm.setDesc(`请输入计划名称`);
           } else {
-            const res = this.view.fileData.plans.filter(v => v.id === plan.id);
+            const res = this.view.timelog.plans.filter(v => v.id === plan.id);
             DEV ?? console.log(res);
-            if (res.length > 0) {
+            if (res.length !== 0) {
               confirm.setDesc(`编号为【${res[0].id}】的计划【${res[0].name}】已经存在，请更改编号。`);
             } else {
-              this.view.fileData.plans.push(plan);
-              await this.view.saveFileData();
+              runInAction(() => {
+                this.view.timelog.plans.push(plan);
+              });
+              await this.view.saveTimelog();
               this.close();
             }
           }
