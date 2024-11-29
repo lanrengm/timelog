@@ -2,6 +2,7 @@ import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
 import fs from 'fs';
+import AdmZip from 'adm-zip';
 
 const dev = (process.argv[2] === "dev");
 
@@ -45,5 +46,11 @@ if (dev) {
   await context.rebuild();
   fs.copyFileSync('./manifest.json', './dist/manifest.json');
   if (fs.existsSync('./styles.css')) fs.copyFileSync('./styles.css', './dist/styles.css');
+  const distZip = new AdmZip();
+  
+  distZip.addLocalFile('dist/manifest.json');
+  distZip.addLocalFile('dist/styles.css');
+  distZip.addLocalFile('dist/main.js');
+  distZip.writeZip('dist/obsidian-timelog.zip');
   process.exit(0);
 }

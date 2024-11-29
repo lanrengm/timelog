@@ -158,11 +158,11 @@ export class TimelogView extends FileView {
       });
     });
 
-    // this.ctxEl.createEl("hr");
-    // this.showPlans(/* this.ctxEl, this.timelog.plans */);
     this.ctxEl.createEl("hr");
-    this.showRecordsChart();
-    // this.showRecordsTable(/* this.ctxEl, this.timelog.records */);
+    this.showPlans(/* this.ctxEl, this.timelog.plans */);
+    // this.ctxEl.createEl("hr");
+    // this.showRecordsChart();
+    this.showRecordsTable(/* this.ctxEl, this.timelog.records */);
   }
 
   async onClose(): Promise<void> {

@@ -1,6 +1,6 @@
 {
 	"name": "timelog",
-	"version": "0.0.4",
+	"version": "0.1.0",
 	"description": "时光日志",
 	"main": "main.js",
 	"scripts": {
@@ -11,9 +11,11 @@
 	"author": "",
 	"license": "MIT",
 	"devDependencies": {
+		"@types/adm-zip": "^0.5.7",
 		"@types/node": "^16.11.6",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
+		"adm-zip": "^0.5.16",
 		"builtin-modules": "3.3.0",
 		"esbuild": "0.17.3",
 		"obsidian": "^1.7.2",

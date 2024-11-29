@@ -11,7 +11,7 @@ export const PLUGIN_VIEW_TYPE_ERR = `插件【${PLUGIN_NAME}】报错: 视图标
 export const DATE_TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss';
 
 export const DEFAULT_SETTINGS: Settings = {
-  enableRibbonIcon: false,
+  enableRibbonIcon: true,
   enableFileExplorerMenuItem: true,
 };
 
