@@ -8,7 +8,12 @@ export const PLUGIN_VIEW_TYPE_ERR = `插件【${PLUGIN_NAME}】报错: 视图标
 /**
  * 时间日期格式化字符串
  */
-export const DATE_TIME_FORMAT = 'YYYY-MM-DD HH:mm:ss';
+export const TIME_FMT = 'YYYY-MM-DD HH:mm:ss';
+
+/**
+ * 用来编号的时间日期字符串
+ */
+export const TIME_FMT_ID = 'YYYYMMDDHHmmss';
 
 export const DEFAULT_SETTINGS: Settings = {
   enableRibbonIcon: true,
