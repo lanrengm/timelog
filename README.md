@@ -8,6 +8,8 @@ Obsidian 插件。
 
 ### 下载插件
 
+在右侧发行版中选择最新的版本，下载 obsidian-timelog.zip 文件。
+
 ### 安装插件
 
 将 obsidian-timelog.zip 解压，解压后的目录结构如下：
@@ -38,3 +40,46 @@ Obsidian 插件。
 ### 新建计划
 
 ### 计划管理
+
+## 开发者
+
+1. 克隆仓库到本地
+
+2. NodeJS 版本: 20.15.0
+
+3. 包管理器: yarn
+
+4. 安装依赖
+
+```shell
+yarn
+```
+
+### 开发
+
+项目目录要放在 `Obsidian库/.obsidian/plugins/` 目录中
+
+启动开发模式：
+
+```shell
+yarn dev
+```
+
+上述命令会在项目根目录生成 main.js
+
+### 发行
+
+```shell
+yarn build
+```
+
+上述命令会生成 dist 目录，并且会自动打包发行文件为 zip
+
+- dist/
+  - manifest.json
+  - main.js
+  - styles.css
+  - obsidian-timelog.zip
+    - manifest.json
+    - main.js
+    - styles.css
