@@ -13,9 +13,9 @@ const context = await esbuild.context({
   format: "cjs",
   target: "es2018",
   logLevel: "info",
-  sourcemap: dev ? "inline" : false,
-  minify: dev ? false : true,
-  treeShaking: dev ? false : true,
+  sourcemap: dev ? false : false,
+  minify: dev ? true : true,
+  treeShaking: dev ? true : true,
   loader: {
     '.svg': 'text',
     '.html': 'text',

@@ -15,10 +15,13 @@ import {
 } from "obsidian";
 import { observable, action, autorun, flow, runInAction, computed } from "mobx";
 import * as d3 from "d3";
+import React, { useState } from "react";
+import { createRoot } from "react-dom/client";
 
 import { PLUGIN_VIEW_TYPE, PLUGIN_FILE_EXT, PLUGIN_ICON, PLUGIN_NAME, Plan, Timelog, DEFAULT_FILE_DATA, Record, TIME_FMT, TIME_FMT_ID } from "../settings";
 import { timeSub } from "../utils";
 import TimelogPlugin from "../main";
+import { Clock } from "../components/index";
 
 export class TimelogView extends FileView {
   navigation: boolean = true;
@@ -125,10 +128,29 @@ export class TimelogView extends FileView {
       });
     }).observe(this.ctlEl);
 
+    // 测试块
+    const root = createRoot(this.ctlEl.createDiv());
+    autorun(() => {
+      root.render(<Clock time={this.timer.value} />);
+    });
+
     this.doing();
-    this.showRecordsTable();
+
+    const root2 = createRoot(this.ctxEl.createDiv());
+    autorun(() => {
+      const lastRecord = this.timelog.records.slice(-5).reverse();
+      // 不加下一行 MobX 监听不到 stop 的修改。
+      this.timelog.records.last()?.stop;
+      root2.render(<RecordsTable records={lastRecord} plans={this.timelog.plans} />);
+    });
+
+    const root3 = createRoot(this.ctxEl.createDiv());
+    autorun(() => {
+      this.timelog.plans.length;
+      root3.render(<PlansTable plans={this.timelog.plans} />);
+    });
+
     // this.showRecordsChart();
-    this.showPlans();
   }
 
   async onClose(): Promise<void> {
@@ -192,57 +214,6 @@ export class TimelogView extends FileView {
   }
 
   /**
-   * 监听数据，刷新计划视图（表格视图）
-   */
-  showPlans(): void {
-    const mounted: HTMLElement = this.ctxEl;
-    //
-    mounted.createEl("h2", { text: "计划" });
-    const table = mounted.createEl("table");
-    const headTr = table.createTHead().createEl("tr");
-    // headTr.createEl("th").setText("编号");
-    headTr.createEl("th").setText("名称");
-    const body = table.createTBody();
-    autorun(() => {
-      body.empty();
-      this.timelog.plans.forEach(plan => {
-        const bodyTr = body.createEl("tr");
-        // bodyTr.createEl("td").setText(plan.id);
-        bodyTr.createEl("td").setText(plan.name);
-      });
-    });
-  }
-
-  /**
-   * 监听数据，刷新记录视图（表格形式）
-   */
-  showRecordsTable(): void {
-    const mounted: HTMLElement = this.ctxEl;
-    //
-    mounted.createEl("h2", { text: "记录" });
-    const table = mounted.createEl("table");
-    const headTr = table.createTHead().createEl("tr");
-    headTr.createEl("th").setText("计划");
-    headTr.createEl("th").setText("时长");
-    headTr.createEl("th").setText("开始时间");
-    headTr.createEl("th").setText("结束时间");
-    // headTr.createEl("th").setText("ID");
-    const body = table.createTBody();
-    autorun(() => {
-      body.empty();
-      const lastTen = this.timelog.records.slice(-5).reverse();
-      lastTen.forEach(record => {
-        const bodyTr = body.createEl("tr");
-        bodyTr.createEl("td").setText(this.timelog.plans.find(plan => record.id === plan.id)!.name ?? "");
-        bodyTr.createEl("td").setText(timeSub(record.start, record.stop, TIME_FMT));
-        bodyTr.createEl("td").setText(record.start);
-        bodyTr.createEl("td").setText(record.stop);
-        // bodyTr.createEl("td").setText(record.id);
-      });
-    });
-  }
-
-  /**
    * 监听数据，刷新记录视图（可视化图形）
    */
   showRecordsChart(): void {
@@ -279,6 +250,11 @@ export class TimelogView extends FileView {
    * 计时器，用来刷新时间
    */
   timer = observable({ value: "" });
+
+  /**
+   * 心跳，一个时钟，用来刷新时间
+   */
+  // heart
 
   /**
    * 时间日志文件数据
@@ -339,10 +315,12 @@ export class TimelogView extends FileView {
   async stopPlan(): Promise<void> {
     if (this.isDoing.get()) {
       const stop = moment().format(TIME_FMT);
-      runInAction(() => {
-        this.timelog.records.last()!.stop = stop;
-      });
-      await this.saveTimelog();
+      if (stop !== this.timelog.records.last()!.start) {
+        runInAction(() => {
+          this.timelog.records.last()!.stop = stop;
+        });
+        await this.saveTimelog();
+      }
     }
   }
 }
@@ -441,9 +419,9 @@ class PlanModal extends Modal {
     this.view.timelog.plans.forEach((plan, index) => {
       new Setting(this.contentEl).setName(plan.id).addText(txt => {
         txt.setValue(plan.name).onChange(val => {
-          runInAction(()=>{
+          runInAction(() => {
             this.view.timelog.plans[index].name = val;
-          })
+          });
         });
       });
     });
@@ -454,9 +432,65 @@ class PlanModal extends Modal {
       this.view.saveTimelog();
     });
 
-    this.onCancel(evt=>{
+    this.onCancel(evt => {
       // 不保存，重新加载文件
       this.view.loadTimelog();
     });
   }
+}
+
+/**
+ * 刷新计划视图（表格视图）
+ */
+function PlansTable({ plans }: { plans: Plan[] }) {
+  return (
+    <>
+      <h2>计划</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>名称</th>
+          </tr>
+        </thead>
+        <tbody>
+          {plans.map(plan => (
+            <tr key={plan.id}>
+              <td>{plan.name}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+/**
+ * 刷新记录视图（表格形式）
+ */
+function RecordsTable({ plans, records }: { plans: Plan[]; records: Record[] }) {
+  return (
+    <>
+      <h2>记录</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>计划</th>
+            <th>时长</th>
+            <th>开始时间</th>
+            <th>结束时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map(record => (
+            <tr key={record.start+record.stop}>
+              <td>{plans.find(plan => record.id === plan.id)!.name ?? ""}</td>
+              <td>{timeSub(record.start, record.stop, TIME_FMT)}</td>
+              <td>{record.start}</td>
+              <td>{record.stop}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
 }
