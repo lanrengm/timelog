@@ -14,3 +14,10 @@
   background-color: white;
   border-radius: 100px;
 }
+
+.tl-clock {
+  padding: var(--h2-padding);
+  font-size: var(--h2-size);
+  color: var(--h2-color);
+  background-color: var(--h2-background);
+}
