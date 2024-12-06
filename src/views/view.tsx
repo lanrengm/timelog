@@ -17,11 +17,11 @@ import { observable, action, autorun, flow, runInAction, computed } from "mobx";
 import * as d3 from "d3";
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
+import type * as CSS from "csstype";
 
 import { PLUGIN_VIEW_TYPE, PLUGIN_FILE_EXT, PLUGIN_ICON, PLUGIN_NAME, Plan, Timelog, DEFAULT_FILE_DATA, Record, TIME_FMT, TIME_FMT_ID } from "../settings";
 import { timeSub } from "../utils";
 import TimelogPlugin from "../main";
-import { Clock } from "../components/index";
 
 export class TimelogView extends FileView {
   navigation: boolean = true;
@@ -83,6 +83,7 @@ export class TimelogView extends FileView {
   constructor(leaf: WorkspaceLeaf, plugin: TimelogPlugin) {
     super(leaf);
     this.plugin = plugin;
+    this.contentEl.setCssStyles({padding: 'var(--file-margins)'});
     const ctlEl = this.contentEl.createDiv({ cls: "timelog-ctl" });
     // 不同的主题渲染表格采用的选择器不同
     // 为了兼容多种主题，添加了 markdown-rendered markdown-preview-view
@@ -104,35 +105,9 @@ export class TimelogView extends FileView {
       }, 1000)
     );
 
-    // 监听 ctlEl 的宽度，动态调整内边距
-    new ResizeObserver(entries => {
-      DEV ?? console.log(`${this.ctlEl.clientWidth}`);
-      // DEV ?? new Notice(`${this.ctlEl.clientWidth}`);
-      if (entries[0].contentRect.width > 500) {
-        const css = {
-          paddingLeft: `50px`,
-          paddingRight: `50px`,
-        };
-        this.ctlEl.setCssStyles(css);
-        this.ctxEl.setCssStyles(css);
-      } else {
-        const css = {
-          paddingLeft: `0px`,
-          paddingRight: `0px`,
-        };
-        this.ctlEl.setCssStyles(css);
-        this.ctxEl.setCssStyles(css);
-      }
-      runInAction(() => {
-        this.ctlWidth.value = entries[0].contentRect.width;
-      });
-    }).observe(this.ctlEl);
-
     // 测试块
     const root = createRoot(this.ctlEl.createDiv());
-    autorun(() => {
-      root.render(<Clock time={this.timer.value} />);
-    });
+    autorun(() => root.render(<Ctl timeStr={this.timer.value} />));
 
     this.doing();
 
@@ -323,6 +298,10 @@ export class TimelogView extends FileView {
       }
     }
   }
+
+  XX() {
+    return <div>XX</div>;
+  }
 }
 
 class PlanModal extends Modal {
@@ -367,18 +346,6 @@ class PlanModal extends Modal {
 
     const plan: Plan = { id: moment().format(TIME_FMT_ID), name: "" };
 
-    // new Setting(this.contentEl)
-    //   .setName("编号")
-    //   .setDesc("编号不能变，计划名随便改")
-    //   .addText(txt => {
-    //     txt
-    //       .setPlaceholder("001")
-    //       .setValue(plan.id)
-    //       .onChange(val => {
-    //         DEV ?? console.log(`${val}`);
-    //         plan.id = val;
-    //       });
-    //   });
     new Setting(this.contentEl).setName("计划名称").addText(txt => {
       txt
         .setPlaceholder("计划名称")
@@ -440,6 +407,37 @@ class PlanModal extends Modal {
 }
 
 /**
+ * 整个视图内容，挂载到 obsidian view 的 content 上
+ */
+function ViewX() {
+  return (
+    <>
+      <Ctl timeStr="timeStr"/>
+    </>
+  );
+}
+
+/**
+ * 视图控制区，控制面板
+ */
+function Ctl({ timeStr }: { timeStr: string }) {
+  return (
+    <div className="timelog-ctl">
+      <Clock timeStr={timeStr} />
+    </div>
+  );
+}
+
+/**
+ * 视图内容区
+ */
+// function Ctx() {
+//   return (<>
+//     <PlansTable plans={}/>
+//   </>);
+// }
+
+/**
  * 刷新计划视图（表格视图）
  */
 function PlansTable({ plans }: { plans: Plan[] }) {
@@ -482,7 +480,7 @@ function RecordsTable({ plans, records }: { plans: Plan[]; records: Record[] }) 
         </thead>
         <tbody>
           {records.map(record => (
-            <tr key={record.start+record.stop}>
+            <tr key={record.start + record.stop}>
               <td>{plans.find(plan => record.id === plan.id)!.name ?? ""}</td>
               <td>{timeSub(record.start, record.stop, TIME_FMT)}</td>
               <td>{record.start}</td>
@@ -492,5 +490,35 @@ function RecordsTable({ plans, records }: { plans: Plan[]; records: Record[] }) 
         </tbody>
       </table>
     </>
+  );
+}
+
+export function Clock({ timeStr }: { timeStr: string }) {
+  const container: CSS.Properties = {
+    padding: "2em",
+  };
+  const wrapper: CSS.Properties = {
+    display: "flex",
+    alignSelf: "center",
+    justifyContent: "space-around",
+    flexWrap: "wrap",
+    padding: "1em",
+    gap: "1em",
+    border: "var(--hr-color) solid 3px",
+    borderRadius: "2em",
+  };
+  const text: CSS.Properties = {
+    color: "var(--h2-color)",
+    fontSize: "var(--h2-size)",
+    fontWeight: "bold",
+    lineHeight: "var(--h2-line-height)",
+  };
+  return (
+    <div style={container}>
+      <div style={wrapper}>
+        <div style={text}>{timeStr.replace(/\s[0-9:]*$/, "")}</div>
+        <div style={text}>{timeStr.replace(/^[0-9\-]*\s/, "")}</div>
+      </div>
+    </div>
   );
 }
