@@ -431,11 +431,11 @@ function Ctl({ timeStr }: { timeStr: string }) {
 /**
  * 视图内容区
  */
-// function Ctx() {
-//   return (<>
-//     <PlansTable plans={}/>
-//   </>);
-// }
+function Ctx({plans}: {plans: Plan[]}) {
+  return (<>
+    <PlansTable plans={plans}/>
+  </>);
+}
 
 /**
  * 刷新计划视图（表格视图）
@@ -495,7 +495,7 @@ function RecordsTable({ plans, records }: { plans: Plan[]; records: Record[] }) 
 
 export function Clock({ timeStr }: { timeStr: string }) {
   const container: CSS.Properties = {
-    padding: "2em",
+    // padding: "2em",
   };
   const wrapper: CSS.Properties = {
     display: "flex",
