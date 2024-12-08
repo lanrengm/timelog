@@ -14,8 +14,6 @@
 		"@types/adm-zip": "^0.5.7",
 		"@types/d3": "^7.4.3",
 		"@types/node": "^16.11.6",
-		"@types/react": "^18.3.13",
-		"@types/react-dom": "^18.3.1",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"adm-zip": "^0.5.16",
@@ -27,8 +25,6 @@
 	},
 	"dependencies": {
 		"d3": "^7.9.0",
-		"mobx": "^6.13.5",
-		"react": "^18.3.1",
-		"react-dom": "^18.3.1"
+		"mobx": "^6.13.5"
 	}
 }
