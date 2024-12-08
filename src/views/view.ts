@@ -12,6 +12,7 @@ import {
   Modal,
   MomentFormatComponent,
   moment,
+  ExtraButtonComponent,
 } from "obsidian";
 import { observable, action, autorun, flow, runInAction, computed } from "mobx";
 import * as d3 from "d3";
@@ -103,24 +104,45 @@ export class TimelogView extends FileView {
     );
 
     // 测试块
-    Clock(this.ctlEl, (render) => {
-      autorun(() => {
-        const dateStr = this.timer.value.replace(/\s[0-9:]*$/, "");
-        const timeStr = this.timer.value.replace(/^[0-9\-]*\s/, "");
-        render(dateStr, timeStr);
+    const clockRender = Clock(this.ctlEl);
+    autorun(() => {
+      const t = this.isDoing.get() ? timeSub(this.timelog.records.last()!.start, this.timer.value, TIME_FMT) : this.timer.value;
+      const dateStr = t.replace(/\s[0-9:]*$/, "");
+      const timeStr = t.replace(/^[0-9\-]*\s/, "");
+      clockRender(dateStr, timeStr);
+    });
+
+    const planSelectRender = PlanSelect(this.ctlEl, (evt: Event) => {
+      runInAction(() => {
+        this.selectedPlanId.value = (evt.target as HTMLSelectElement).value;
       });
     });
-    this.doing();
-    RecordsTable(this.ctxEl, (render) => {
-      autorun(()=>{
-        const lastRecord = this.timelog.records.slice(-5).reverse();
-        render(this.timelog.plans, lastRecord);
+    autorun(() => {
+      console.log("渲染" + this.selectedPlanId.value);
+
+      const v = planSelectRender(this.timelog.plans, this.timelog.records);
+      runInAction(() => {
+        this.selectedPlanId.value = v;
       });
     });
-    PlansTable(this.ctxEl, (render)=>{
-      autorun(()=>{
-        render(this.timelog.plans);
-      });
+    const startButtonRender = StartButton(this.ctlEl, () => {
+      if (this.isDoing.get()) {
+        this.stopPlan();
+      } else {
+        this.startPlan();
+      }
+    });
+    autorun(() => {
+      startButtonRender(this.isDoing.get());
+    });
+    const recordsTableRender = RecordsTable(this.ctxEl);
+    autorun(() => {
+      const lastRecord = this.timelog.records.slice(-5).reverse();
+      recordsTableRender(this.timelog.plans, lastRecord);
+    });
+    const plansTableRender = PlansTable(this.ctxEl);
+    autorun(() => {
+      plansTableRender(this.timelog.plans);
     });
   }
 
@@ -138,50 +160,6 @@ export class TimelogView extends FileView {
   async onUnloadFile(file: TFile): Promise<void> {
     DEV ?? console.log(`onUnloadFile(${file.name})`);
     // 切换时光日志时触发
-  }
-
-  doing() {
-    const heading = new Setting(this.ctlEl);
-
-    autorun(() => {
-      if (this.isDoing.get()) {
-        const time = timeSub(this.timelog.records.last()!.start, this.timer.value, TIME_FMT);
-        heading.setName(time);
-      } else {
-        heading.setName(`${this.timer.value}`);
-      }
-    });
-
-    heading.addDropdown(dd => {
-      // this.timelog 更新后刷新视图
-      autorun(() => {
-        dd.selectEl.empty();
-        this.timelog.plans.forEach(plan => dd.addOption(plan.id, plan.name));
-        if (this.timelog.records.length !== 0) {
-          const lastRecordId = this.timelog.records.last()!.id;
-          dd.setValue(lastRecordId);
-        }
-        // 刷新状态
-        runInAction(() => {
-          this.selectedPlanId.value = dd.getValue();
-        });
-      });
-      dd.onChange(value => {
-        runInAction(() => {
-          this.selectedPlanId.value = value;
-        });
-      });
-    });
-
-    heading.addExtraButton(btn => {
-      autorun(() => {
-        if (this.isDoing.get()) {
-          btn.setIcon("square").onClick(() => this.stopPlan());
-        } else {
-          btn.setIcon("play").onClick(() => this.startPlan());
-        }
-      });
-    });
   }
 
   /**
@@ -401,7 +379,7 @@ class PlanModal extends Modal {
 /**
  * 刷新计划视图（表格视图）
  */
-function PlansTable(mountedEl: HTMLElement, callRender: (render: (plans: Plan[])=>void)=>void): HTMLElement {
+function PlansTable(mountedEl: HTMLElement): (plans: Plan[]) => void {
   const rootEl = mountedEl.createDiv({});
   rootEl.innerHTML = /*html*/ `
     <h2>计划</h2>
@@ -413,22 +391,21 @@ function PlansTable(mountedEl: HTMLElement, callRender: (render: (plans: Plan[])
   /**
    * 渲染视图
    */
-  const bodyEl = rootEl.querySelector('table tbody');
-  callRender((plans) => {
+  const bodyEl = rootEl.querySelector("table tbody");
+  return plans => {
     bodyEl?.empty();
-    let body = '';
+    let body = "";
     for (const plan of plans) {
       body += /*html*/ `<tr><td>${plan.name}</td></tr>`;
     }
-    if(bodyEl) bodyEl.innerHTML = body;
-  });
-  return rootEl;
+    if (bodyEl) bodyEl.innerHTML = body;
+  };
 }
 
 /**
  * 刷新记录视图（表格形式）
  */
-function RecordsTable(mountedEl: HTMLElement, callRender: (render: (plans: Plan[], records: Record[]) => void) => void): HTMLElement {
+function RecordsTable(mountedEl: HTMLElement): (plans: Plan[], records: Record[]) => void {
   /**
    * HTML
    */
@@ -452,9 +429,9 @@ function RecordsTable(mountedEl: HTMLElement, callRender: (render: (plans: Plan[
    * 视图刷新
    */
   const tbodyEl: HTMLTableSectionElement = rootEl.querySelector("table tbody")!;
-  callRender((plans, records) => {
+  return (plans, records) => {
     tbodyEl.empty();
-    let body = '';
+    let body = "";
     for (const record of records) {
       body += /*html*/ `
         <tr>
@@ -466,17 +443,15 @@ function RecordsTable(mountedEl: HTMLElement, callRender: (render: (plans: Plan[
       `;
     }
     tbodyEl.innerHTML = body;
-  });
-  return rootEl;
+  };
 }
 
 /**
  * 时钟组件
  * @param mountedEl 挂载点
- * @param callRender 刷新视图的回调函数
- * @returns 组件根，mounted/cptRoot
+ * @returns render 刷新视图的回调函数
  */
-function Clock(mountedEl: HTMLElement, callRender: (render: (dateStr: string, timeStr: string) => void)=>void ): HTMLElement {
+function Clock(mountedEl: HTMLElement): (dateStr: string, timeStr: string) => void {
   /**
    * HTML
    */
@@ -500,7 +475,7 @@ function Clock(mountedEl: HTMLElement, callRender: (render: (dateStr: string, ti
     padding: "1em",
     gap: "1em",
     border: "var(--hr-color) solid 3px",
-    borderRadius: "2em",
+    borderRadius: "1em",
   });
   const textEls: NodeListOf<HTMLDivElement> = rootEl.querySelectorAll(".text");
   textEls.forEach(textEl =>
@@ -516,14 +491,85 @@ function Clock(mountedEl: HTMLElement, callRender: (render: (dateStr: string, ti
    */
   const dateEl = textEls[0];
   const timeEl = textEls[1];
-  callRender((dateStr, timeStr)=>{
+  return (dateStr, timeStr) => {
     dateEl.innerText = dateStr;
     timeEl.innerText = timeStr;
-  });
+  };
+}
 
-  if (rootEl) {
-    return rootEl;
-  } else {
-    throw Error("组件模板错误");
+/**
+ * 计划选择器
+ */
+function PlanSelect(mountedEl: HTMLElement, onSelectChange: (evt: Event) => void): (plans: Plan[], records: Record[]) => string {
+  /**
+   * HTML
+   */
+  const rootEl = mountedEl.createDiv();
+  rootEl.innerHTML = /*html*/ `
+    <select class="tl-dropdown">
+      <option><option>
+    </select>
+  `;
+  /**
+   * CSS
+   */
+  rootEl.setCssStyles({
+    display: "flex",
+    flexWrap: "wrap",
+  });
+  const dropdownEl = rootEl.querySelector(".tl-drow");
+  /**
+   * render
+   */
+  const selectEl = rootEl.querySelector("select")!;
+  selectEl.addEventListener("change", onSelectChange);
+  return (plans, records) => {
+    selectEl.empty();
+    let options = "";
+    for (const plan of plans) {
+      options += /*html*/ `
+        <option value="${plan.id}">${plan.name}</option>
+      `;
+    }
+    selectEl.innerHTML = options;
+    if (records.length !== 0) selectEl.value = records.last()!.id;
+    return selectEl.value;
+  };
+}
+
+/**
+ * 开始按钮
+ */
+function StartButton(mountedEl: HTMLElement, onClick: () => void): (status: boolean) => void {
+  const rootEl = new ExtraButtonComponent(mountedEl);
+  rootEl.onClick(onClick);
+  return status => {
+    if (status) {
+      rootEl.setIcon("square");
+    } else {
+      rootEl.setIcon("play");
+    }
+  };
+}
+
+class Ctl3 {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  constructor(mountedEl: HTMLElement) {
+    this.rootEl = createDiv();
+    //
+
+    //
+    this.initCss();
+    if (mountedEl) {
+      mountedEl.appendChild(this.rootEl);
+      this.mountedEl = mountedEl;
+    }
+  }
+  private initCss() {
+    this.rootEl.setCssStyles({
+      display: "flex",
+      flexWrap: "wrap",
+    });
   }
 }

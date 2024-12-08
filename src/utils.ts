@@ -7,7 +7,7 @@ import { moment } from "obsidian";
  * @param fmt 时间字符串的格式
  * @returns {string} 格式化后的时间段，返回简化形式
  *   - 完整形式：0000-00-00 00:00:00
- *   - 简化形式：00:12:30 12分30秒
+ *   - ~~简化形式：00:12:30 12分30秒~~
  *   - 当输入时间不对时，返回空字符串
  */
 export function timeSub(start: string, stop: string, fmt: string): string {
@@ -22,7 +22,9 @@ export function timeSub(start: string, stop: string, fmt: string): string {
     const minute = du.get("minutes").toString().padStart(2, "0");
     const second = du.get("seconds").toString().padStart(2,"0");
   
-    return `${year}-${month}-${day} ${hour}:${minute}:${second}`.replace(/^[0-]+/, '');
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+    // 简化形式
+    // .replace(/^[0-]+/, '');
   } else {
     return '';
   }
