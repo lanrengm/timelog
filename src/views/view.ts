@@ -87,6 +87,12 @@ export class TimelogView extends FileView {
     // 为了兼容多种主题，添加了 markdown-rendered markdown-preview-view
     const ctxEl = this.contentEl.createDiv({ cls: "timelog-ctx markdown-rendered markdown-preview-view" });
     this.ctlEl = ctlEl;
+    this.ctlEl.setCssStyles({
+      display: "flex",
+      justifyContent: 'space-around',
+      flexWrap: "wrap",
+      gap: "1em"
+    })
     this.ctxEl = ctxEl;
     DEV ?? console.log(`new TimeLogView(${leaf}, ${plugin})`);
   }
@@ -111,8 +117,17 @@ export class TimelogView extends FileView {
       const timeStr = t.replace(/^[0-9\-]*\s/, "");
       clockRender(dateStr, timeStr);
     });
-
-    const planSelectRender = PlanSelect(this.ctlEl, (evt: Event) => {
+    this.ctlEl.createDiv().setCssStyles({height: "1em"});
+    const s2 = this.ctlEl.createDiv();
+    s2.setCssStyles({
+      display: 'flex',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: '1em'
+    })
+    // 
+    const planSelectRender = PlanSelect(s2, (evt: Event) => {
       runInAction(() => {
         this.selectedPlanId.value = (evt.target as HTMLSelectElement).value;
       });
@@ -125,16 +140,18 @@ export class TimelogView extends FileView {
         this.selectedPlanId.value = v;
       });
     });
-    const startButtonRender = StartButton(this.ctlEl, () => {
+    // 开始/结束 按钮
+    const startButton = new StartButton(s2).onClick(() => {
       if (this.isDoing.get()) {
         this.stopPlan();
       } else {
         this.startPlan();
       }
     });
-    autorun(() => {
-      startButtonRender(this.isDoing.get());
-    });
+    autorun(()=>{
+      startButton.toggleIcon(this.isDoing.get());
+    })
+    // 
     const recordsTableRender = RecordsTable(this.ctxEl);
     autorun(() => {
       const lastRecord = this.timelog.records.slice(-5).reverse();
@@ -540,16 +557,38 @@ function PlanSelect(mountedEl: HTMLElement, onSelectChange: (evt: Event) => void
 /**
  * 开始按钮
  */
-function StartButton(mountedEl: HTMLElement, onClick: () => void): (status: boolean) => void {
-  const rootEl = new ExtraButtonComponent(mountedEl);
-  rootEl.onClick(onClick);
-  return status => {
+class StartButton {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  wrapperEl: HTMLElement;
+  btnCpt;
+  constructor(mountedEl: HTMLElement){
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv();
+    this.wrapperEl = this.rootEl.createDiv();
+    this.btnCpt = new ExtraButtonComponent(this.wrapperEl);
+    this.initCss();
+  }
+  initCss() {
+    this.rootEl.setCssStyles({
+      padding: '1em',
+      border: "var(--hr-color) solid 3px",
+      borderRadius: '1em'
+    });
+    this.wrapperEl.setCssStyles({
+    })
+  }
+  onClick(cb: () => any): this {
+    this.btnCpt.onClick(cb);
+    return this;
+  }
+  toggleIcon(status: boolean) {
     if (status) {
-      rootEl.setIcon("square");
+      this.btnCpt.setIcon('square');
     } else {
-      rootEl.setIcon("play");
+      this.btnCpt.setIcon('play');
     }
-  };
+  }
 }
 
 class Ctl3 {

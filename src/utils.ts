@@ -20,7 +20,11 @@ export function timeSub(start: string, stop: string, fmt: string): string {
     const day = du.get("days").toString().padStart(2, "0");
     const hour = du.get("hours").toString().padStart(2, "0");
     const minute = du.get("minutes").toString().padStart(2, "0");
-    const second = du.get("seconds").toString().padStart(2,"0");
+    let s = du.get("seconds");
+    if (s<0) {
+      s = 0;
+    }
+    const second = s.toString().padStart(2,"0");
   
     return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
     // 简化形式
