@@ -127,19 +127,17 @@ export class TimelogView extends FileView {
       gap: '1em'
     })
     // 
-    const planSelectRender = PlanSelect(s2, (evt: Event) => {
+    const planSelect = new PlanSelect2(s2).onSelectChange((value)=>{
       runInAction(() => {
-        this.selectedPlanId.value = (evt.target as HTMLSelectElement).value;
+        this.selectedPlanId.value = value;
       });
     });
-    autorun(() => {
-      console.log("渲染" + this.selectedPlanId.value);
-
-      const v = planSelectRender(this.timelog.plans, this.timelog.records);
+    autorun(()=>{
+      const v = planSelect.renderList(this.timelog.plans, this.timelog.records);
       runInAction(() => {
         this.selectedPlanId.value = v;
       });
-    });
+    })
     // 开始/结束 按钮
     const startButton = new StartButton(s2).onClick(() => {
       if (this.isDoing.get()) {
@@ -152,11 +150,12 @@ export class TimelogView extends FileView {
       startButton.toggleIcon(this.isDoing.get());
     })
     // 
-    const recordsTableRender = RecordsTable(this.ctxEl);
-    autorun(() => {
+    const recordsTable = new RecordsTable(this.ctxEl);
+    autorun(()=>{
       const lastRecord = this.timelog.records.slice(-5).reverse();
-      recordsTableRender(this.timelog.plans, lastRecord);
-    });
+      recordsTable.renderBody(this.timelog.plans, lastRecord);
+    })
+    // 
     const plansTableRender = PlansTable(this.ctxEl);
     autorun(() => {
       plansTableRender(this.timelog.plans);
@@ -422,46 +421,47 @@ function PlansTable(mountedEl: HTMLElement): (plans: Plan[]) => void {
 /**
  * 刷新记录视图（表格形式）
  */
-function RecordsTable(mountedEl: HTMLElement): (plans: Plan[], records: Record[]) => void {
-  /**
-   * HTML
-   */
-  const rootEl = mountedEl.createDiv({});
-  rootEl.innerHTML = /*html*/ `
-    <h2>记录</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>计划</th>
-          <th>时长</th>
-          <th>开始时间</th>
-          <th>结束时间</th>
-        </tr>
-      </thead>
-      <tbody>
-      </tbody>
-    </table>
-  `;
-  /**
-   * 视图刷新
-   */
-  const tbodyEl: HTMLTableSectionElement = rootEl.querySelector("table tbody")!;
-  return (plans, records) => {
-    tbodyEl.empty();
+class RecordsTable {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  tbodyEl: HTMLTableSectionElement;
+  constructor(mountedEl: HTMLElement){
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv({});
+    this.rootEl.innerHTML = /*html*/ `
+      <h2>记录</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>计划</th>
+            <th>时长</th>
+            <th>开始时间</th>
+            <th>结束时间</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    `;
+    this.tbodyEl = this.rootEl.querySelector("table tbody")!;
+  }
+  renderBody(plans: Plan[], records: Record[]) {
+    this.tbodyEl.empty();
     let body = "";
     for (const record of records) {
       body += /*html*/ `
         <tr>
           <td>${plans.find(plan => record.id === plan.id)!.name ?? ""}</td>
           <td>${timeSub(record.start, record.stop, TIME_FMT)}</td>
-          <td>${record.start}</td>
-          <td>${record.stop}</td>
+          <td class="tl-start">${record.start}</td>
+          <td class="tl-stop">${record.stop}</td>
         </tr>
       `;
     }
-    tbodyEl.innerHTML = body;
+    this.tbodyEl.innerHTML = body;
   };
 }
+
 
 /**
  * 时钟组件
@@ -534,7 +534,7 @@ function PlanSelect(mountedEl: HTMLElement, onSelectChange: (evt: Event) => void
     display: "flex",
     flexWrap: "wrap",
   });
-  const dropdownEl = rootEl.querySelector(".tl-drow");
+  const dropdownEl = rootEl.querySelector(".tl-dropdown");
   /**
    * render
    */
@@ -552,6 +552,44 @@ function PlanSelect(mountedEl: HTMLElement, onSelectChange: (evt: Event) => void
     if (records.length !== 0) selectEl.value = records.last()!.id;
     return selectEl.value;
   };
+}
+
+class PlanSelect2 {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  selectEl: HTMLSelectElement;
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv();
+    this.rootEl.innerHTML = /*html*/ `
+      <select>
+        <option><option>
+      </select>
+    `;
+    this.rootEl.setCssStyles({
+      display: "flex",
+      flexWrap: "wrap",
+    });
+    this.selectEl = this.rootEl.querySelector("select")!;
+  }
+  onSelectChange(cb: (value: string) => any): this {
+    this.selectEl.addEventListener("change", (evt) => {
+      cb((evt.target as HTMLSelectElement).value);
+    });
+    return this;
+  }
+  renderList(plans: Plan[], records: Record[]): string {
+    this.selectEl.empty();
+    let options = "";
+    for (const plan of plans) {
+      options += /*html*/ `
+        <option value="${plan.id}">${plan.name}</option>
+      `;
+    }
+    this.selectEl.innerHTML = options;
+    if (records.length !== 0) this.selectEl.value = records.last()!.id;
+    return this.selectEl.value;
+  }
 }
 
 /**
