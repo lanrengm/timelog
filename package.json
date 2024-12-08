@@ -1,6 +1,6 @@
 {
 	"name": "timelog",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"description": "时光日志",
 	"main": "main.js",
 	"scripts": {
