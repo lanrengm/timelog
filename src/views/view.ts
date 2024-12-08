@@ -89,10 +89,10 @@ export class TimelogView extends FileView {
     this.ctlEl = ctlEl;
     this.ctlEl.setCssStyles({
       display: "flex",
-      justifyContent: 'space-around',
+      justifyContent: "space-around",
       flexWrap: "wrap",
-      gap: "1em"
-    })
+      gap: "1em",
+    });
     this.ctxEl = ctxEl;
     DEV ?? console.log(`new TimeLogView(${leaf}, ${plugin})`);
   }
@@ -117,25 +117,23 @@ export class TimelogView extends FileView {
       const timeStr = t.replace(/^[0-9\-]*\s/, "");
       clockRender(dateStr, timeStr);
     });
-    this.ctlEl.createDiv().setCssStyles({height: "1em"});
+    this.ctlEl.createDiv().setCssStyles({ height: "1em" });
     const s2 = this.ctlEl.createDiv();
     s2.setCssStyles({
-      display: 'flex',
-      flexWrap: 'wrap',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: '1em'
-    })
-    // 
-    const planSelectRender = PlanSelect(s2, (evt: Event) => {
+      display: "flex",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: "1em",
+    });
+    //
+    const planSelect = new PlanSelect(s2).onSelectChange(value => {
       runInAction(() => {
-        this.selectedPlanId.value = (evt.target as HTMLSelectElement).value;
+        this.selectedPlanId.value = value;
       });
     });
     autorun(() => {
-      console.log("渲染" + this.selectedPlanId.value);
-
-      const v = planSelectRender(this.timelog.plans, this.timelog.records);
+      const v = planSelect.renderList(this.timelog.plans, this.timelog.records);
       runInAction(() => {
         this.selectedPlanId.value = v;
       });
@@ -148,15 +146,21 @@ export class TimelogView extends FileView {
         this.startPlan();
       }
     });
-    autorun(()=>{
-      startButton.toggleIcon(this.isDoing.get());
-    })
-    // 
-    const recordsTableRender = RecordsTable(this.ctxEl);
     autorun(() => {
-      const lastRecord = this.timelog.records.slice(-5).reverse();
-      recordsTableRender(this.timelog.plans, lastRecord);
+      startButton.renderIcon(this.isDoing.get());
     });
+    //
+    const recordsTable = new RecordsTable(this.ctxEl);
+    autorun(() => {
+      recordsTable.renderBody(this.timelog.plans, this.timelog.records);
+    });
+    recordsTable.onClickStartCell((i, v) => {
+      DEV ?? console.log(i, v);
+    });
+    recordsTable.onClickStopCell((i, v) => {
+      DEV ?? console.log(i, v);
+    });
+    //
     const plansTableRender = PlansTable(this.ctxEl);
     autorun(() => {
       plansTableRender(this.timelog.plans);
@@ -420,47 +424,93 @@ function PlansTable(mountedEl: HTMLElement): (plans: Plan[]) => void {
 }
 
 /**
- * 刷新记录视图（表格形式）
+ * 记录视图（表格形式）
  */
-function RecordsTable(mountedEl: HTMLElement): (plans: Plan[], records: Record[]) => void {
+class RecordsTable {
+  mountedEl: HTMLElement;
   /**
    * HTML
    */
-  const rootEl = mountedEl.createDiv({});
-  rootEl.innerHTML = /*html*/ `
-    <h2>记录</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>计划</th>
-          <th>时长</th>
-          <th>开始时间</th>
-          <th>结束时间</th>
-        </tr>
-      </thead>
-      <tbody>
-      </tbody>
-    </table>
-  `;
+  rootEl: HTMLElement;
+  tbodyEl: HTMLTableSectionElement;
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv({});
+    this.rootEl.innerHTML = /*html*/ `
+      <h2>记录</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>index</th>
+            <th>计划</th>
+            <th>时长</th>
+            <th>开始时间</th>
+            <th>结束时间</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    `;
+    this.tbodyEl = this.rootEl.querySelector("table tbody")!;
+  }
   /**
-   * 视图刷新
+   * 点击修改开始时间
    */
-  const tbodyEl: HTMLTableSectionElement = rootEl.querySelector("table tbody")!;
-  return (plans, records) => {
-    tbodyEl.empty();
+  onClickStartCell(cb: (index: string, value: string) => any): this {
+    this.onClickStartCellCb = cb;
+    return this;
+  }
+  private onClickStartCellCb: (index: string, value: string) => any = () => null;
+  /**
+   * 点击修改结束时间
+   */
+  onClickStopCell(cb: (index: string, value: string) => any): this {
+    this.onClickStopCellCb = cb;
+    return this;
+  }
+  private onClickStopCellCb: (index: string, value: string) => any = () => null;
+  /**
+   * 刷新表格主体
+   */
+  renderBody(plans: Plan[], records: Record[]) {
+    this.tbodyEl.empty();
+    const newR: [Record, number][] = records.map((v, i) => [v, i]);
+    const lastR = newR.slice(-5).reverse();
     let body = "";
-    for (const record of records) {
+    for (const [record, index] of lastR) {
       body += /*html*/ `
-        <tr>
+        <tr data-index="${index}">
+          <td>${index}</td>
           <td>${plans.find(plan => record.id === plan.id)!.name ?? ""}</td>
           <td>${timeSub(record.start, record.stop, TIME_FMT)}</td>
-          <td>${record.start}</td>
-          <td>${record.stop}</td>
+          <td class="tl-start">${record.start}</td>
+          <td class="tl-stop">${record.stop}</td>
         </tr>
       `;
     }
-    tbodyEl.innerHTML = body;
-  };
+    this.tbodyEl.innerHTML = body;
+    const startCells = this.tbodyEl.querySelectorAll(".tl-start");
+    startCells.forEach(start =>
+      start.addEventListener("click", evt => {
+        const td = evt.target as HTMLTableCellElement;
+        const tr = td.parentElement as HTMLTableRowElement;
+        const index = tr.getAttribute("data-index");
+        const value = td.textContent;
+        if (index && value) this.onClickStartCellCb(index, value);
+      })
+    );
+    const stopCells = this.tbodyEl.querySelectorAll(".tl-stop");
+    stopCells.forEach(stop =>
+      stop.addEventListener("click", evt => {
+        const td = evt.target as HTMLTableCellElement;
+        const tr = td.parentElement as HTMLTableRowElement;
+        const index = tr.getAttribute("data-index");
+        const value = td.textContent;
+        if (index && value) this.onClickStartCellCb(index, value);
+      })
+    );
+  }
 }
 
 /**
@@ -517,41 +567,57 @@ function Clock(mountedEl: HTMLElement): (dateStr: string, timeStr: string) => vo
 /**
  * 计划选择器
  */
-function PlanSelect(mountedEl: HTMLElement, onSelectChange: (evt: Event) => void): (plans: Plan[], records: Record[]) => string {
+class PlanSelect {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  selectEl: HTMLSelectElement;
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    /**
+     * HTML
+     */
+    this.rootEl = this.mountedEl.createDiv();
+    this.rootEl.innerHTML = /*html*/ `
+      <select>
+        <option><option>
+      </select>
+    `;
+    /**
+     * CSS
+     */
+    this.rootEl.setCssStyles({
+      display: "flex",
+      flexWrap: "wrap",
+    });
+    this.selectEl = this.rootEl.querySelector("select")!;
+  }
   /**
-   * HTML
+   * 用户手动选择时的事件回调
    */
-  const rootEl = mountedEl.createDiv();
-  rootEl.innerHTML = /*html*/ `
-    <select class="tl-dropdown">
-      <option><option>
-    </select>
-  `;
+  onSelectChange(cb: (value: string) => any): this {
+    this.selectEl.addEventListener("change", evt => {
+      cb((evt.target as HTMLSelectElement).value);
+    });
+    return this;
+  }
   /**
-   * CSS
+   * 刷新选择器可选列表
+   * @param plans
+   * @param records
+   * @returns
    */
-  rootEl.setCssStyles({
-    display: "flex",
-    flexWrap: "wrap",
-  });
-  const dropdownEl = rootEl.querySelector(".tl-drow");
-  /**
-   * render
-   */
-  const selectEl = rootEl.querySelector("select")!;
-  selectEl.addEventListener("change", onSelectChange);
-  return (plans, records) => {
-    selectEl.empty();
+  renderList(plans: Plan[], records: Record[]): string {
+    this.selectEl.empty();
     let options = "";
     for (const plan of plans) {
       options += /*html*/ `
         <option value="${plan.id}">${plan.name}</option>
       `;
     }
-    selectEl.innerHTML = options;
-    if (records.length !== 0) selectEl.value = records.last()!.id;
-    return selectEl.value;
-  };
+    this.selectEl.innerHTML = options;
+    if (records.length !== 0) this.selectEl.value = records.last()!.id;
+    return this.selectEl.value;
+  }
 }
 
 /**
@@ -562,31 +628,37 @@ class StartButton {
   rootEl: HTMLElement;
   wrapperEl: HTMLElement;
   btnCpt;
-  constructor(mountedEl: HTMLElement){
+  constructor(mountedEl: HTMLElement) {
     this.mountedEl = mountedEl;
+    /**
+     * HTML
+     */
     this.rootEl = this.mountedEl.createDiv();
     this.wrapperEl = this.rootEl.createDiv();
     this.btnCpt = new ExtraButtonComponent(this.wrapperEl);
-    this.initCss();
-  }
-  initCss() {
+    /**
+     * CSS
+     */
     this.rootEl.setCssStyles({
-      padding: '1em',
+      padding: "1em",
       border: "var(--hr-color) solid 3px",
-      borderRadius: '1em'
+      borderRadius: "1em",
     });
-    this.wrapperEl.setCssStyles({
-    })
+    this.wrapperEl.setCssStyles({});
   }
   onClick(cb: () => any): this {
     this.btnCpt.onClick(cb);
     return this;
   }
-  toggleIcon(status: boolean) {
+  /**
+   * toggle icon
+   * @param status boolean
+   */
+  renderIcon(status: boolean) {
     if (status) {
-      this.btnCpt.setIcon('square');
+      this.btnCpt.setIcon("square");
     } else {
-      this.btnCpt.setIcon('play');
+      this.btnCpt.setIcon("play");
     }
   }
 }
