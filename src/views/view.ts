@@ -75,25 +75,17 @@ export class TimelogView extends FileView {
   }
 
   plugin: TimelogPlugin;
-  ctlEl: HTMLElement;
+  ctl: Ctl;
   ctxEl: HTMLElement;
 
   constructor(leaf: WorkspaceLeaf, plugin: TimelogPlugin) {
     super(leaf);
     this.plugin = plugin;
     this.contentEl.setCssStyles({ padding: "var(--file-margins)" });
-    const ctlEl = this.contentEl.createDiv({ cls: "timelog-ctl" });
+    this.ctl = new Ctl(this.contentEl);
     // 不同的主题渲染表格采用的选择器不同
     // 为了兼容多种主题，添加了 markdown-rendered markdown-preview-view
-    const ctxEl = this.contentEl.createDiv({ cls: "timelog-ctx markdown-rendered markdown-preview-view" });
-    this.ctlEl = ctlEl;
-    this.ctlEl.setCssStyles({
-      display: "flex",
-      justifyContent: "space-around",
-      flexWrap: "wrap",
-      gap: "1em",
-    });
-    this.ctxEl = ctxEl;
+    this.ctxEl = this.contentEl.createDiv({ cls: "timelog-ctx markdown-rendered markdown-preview-view" });
     DEV ?? console.log(`new TimeLogView(${leaf}, ${plugin})`);
   }
 
@@ -109,25 +101,16 @@ export class TimelogView extends FileView {
       }, 1000)
     );
 
-    // 测试块
-    const clockRender = Clock(this.ctlEl);
+    // 时钟
+    const clockRender = Clock(this.ctl.getM1());
     autorun(() => {
       const t = this.isDoing.get() ? timeSub(this.timelog.records.last()!.start, this.timer.value, TIME_FMT) : this.timer.value;
       const dateStr = t.replace(/\s[0-9:]*$/, "");
       const timeStr = t.replace(/^[0-9\-]*\s/, "");
       clockRender(dateStr, timeStr);
     });
-    this.ctlEl.createDiv().setCssStyles({ height: "1em" });
-    const s2 = this.ctlEl.createDiv();
-    s2.setCssStyles({
-      display: "flex",
-      flexWrap: "wrap",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: "1em",
-    });
-    //
-    const planSelect = new PlanSelect(s2).onSelectChange(value => {
+    // 选择器
+    const planSelect = new PlanSelect(this.ctl.getM3()).onSelectChange(value => {
       runInAction(() => {
         this.selectedPlanId.value = value;
       });
@@ -139,7 +122,7 @@ export class TimelogView extends FileView {
       });
     });
     // 开始/结束 按钮
-    const startButton = new StartButton(s2).onClick(() => {
+    const startButton = new StartButton(this.ctl.getM4()).onClick(() => {
       if (this.isDoing.get()) {
         this.stopPlan();
       } else {
@@ -640,7 +623,7 @@ class StartButton {
      * CSS
      */
     this.rootEl.setCssStyles({
-      padding: "1em",
+      padding: "3px",
       border: "var(--hr-color) solid 3px",
       borderRadius: "1em",
     });
@@ -663,24 +646,60 @@ class StartButton {
   }
 }
 
-class Ctl3 {
+class Ctl {
   mountedEl: HTMLElement;
   rootEl: HTMLElement;
   constructor(mountedEl: HTMLElement) {
-    this.rootEl = createDiv();
-    //
-
-    //
-    this.initCss();
-    if (mountedEl) {
-      mountedEl.appendChild(this.rootEl);
-      this.mountedEl = mountedEl;
-    }
-  }
-  private initCss() {
+    this.mountedEl = mountedEl;
+    /**
+     * HTML
+     */
+    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl tl-ctl-node1" });
+    this.rootEl.innerHTML = /*html*/ `
+      <div class="tl-ctl-node2">
+        <div class="tl-ctl-node3 tl-ctl-mounted1"></div>
+        <div class="tl-ctl-node3 tl-ctl-mounted2"></div>
+      </div>
+      <div class="tl-ctl-node2">
+        <div class="tl-ctl-node3 tl-ctl-mounted3"></div>
+        <div class="tl-ctl-node3 tl-ctl-mounted4"></div>
+      </div>
+    `;
+    /**
+     * CSS
+     */
+    // node1
     this.rootEl.setCssStyles({
       display: "flex",
-      flexWrap: "wrap",
+      flexFlow: "row wrap",
+      gap: "20px",
     });
+    // node2
+    this.rootEl.querySelectorAll(".tl-ctl-node2").forEach(el =>
+      (el as HTMLElement).setCssStyles({
+        flex: "1 0 400px",
+        display: "flex",
+        flexFlow: "row wrap",
+        gap: "20px",
+      })
+    );
+    // node3
+    this.rootEl.querySelectorAll(".tl-ctl-node3").forEach(el =>
+      (el as HTMLElement).setCssStyles({
+        flex: "1 0 200px",
+      })
+    );
+  }
+  getM1() {
+    return this.rootEl.querySelector('.tl-ctl-mounted1') as HTMLElement;
+  }
+  getM2() {
+    return this.rootEl.querySelector('.tl-ctl-mounted2') as HTMLElement;
+  }
+  getM3() {
+    return this.rootEl.querySelector('.tl-ctl-mounted3') as HTMLElement;
+  }
+  getM4() {
+    return this.rootEl.querySelector('.tl-ctl-mounted4') as HTMLElement;
   }
 }
