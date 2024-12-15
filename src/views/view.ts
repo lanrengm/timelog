@@ -15,26 +15,49 @@ import {
   ExtraButtonComponent,
 } from "obsidian";
 import { observable, action, autorun, flow, runInAction, computed } from "mobx";
-import * as d3 from "d3";
+// import * as d3 from "d3";
 
 import { PLUGIN_VIEW_TYPE, PLUGIN_FILE_EXT, PLUGIN_ICON, PLUGIN_NAME, Plan, Timelog, DEFAULT_FILE_DATA, Record, TIME_FMT, TIME_FMT_ID } from "../settings";
 import { timeSub } from "../utils";
 import TimelogPlugin from "../main";
 
-export class TimelogView extends FileView {
+/**
+ * 将渲染部分和配置部分拆分
+ * 此基础视图类用来处理基本配置
+ */
+class TimelogBaseView extends FileView {
   navigation: boolean = true;
   allowNoFile: boolean = false;
   file: TFile;
+
   plugin: TimelogPlugin;
+
+  /**
+   * 时间日志文件数据
+   */
+  fileData: Timelog = observable(DEFAULT_FILE_DATA);
+
+  /**
+   * 心跳，一个时钟，一秒为一个周期，用来刷新时间
+   */
+  heart = observable({ value: "0000-00-00 00:00:00" });
 
   constructor(leaf: WorkspaceLeaf, plugin: TimelogPlugin) {
     super(leaf);
     this.plugin = plugin;
-    this.contentEl.addClasses(["timelog-view"]);
+
+    this.registerInterval(
+      window.setInterval(() => {
+        // DEV ?? console.log(`计时器`, this);
+        runInAction(() => {
+          this.heart.value = moment().format("YYYY-MM-DD HH:mm:ss");
+        });
+      }, 1000)
+    );
 
     DEV ?? console.log(`new TimeLogView( leaf: ${leaf.getDisplayText()}, plugin: ${plugin.manifest.id})`);
   }
-
+  
   canAcceptExtension(extension: string): boolean {
     return extension == PLUGIN_FILE_EXT;
   }
@@ -50,6 +73,43 @@ export class TimelogView extends FileView {
   getIcon(): IconName {
     return PLUGIN_ICON;
   }
+
+  async loadFileData() {
+    const content = await this.app.vault.read(this.file);
+    const fileData: Timelog = Object.assign({}, DEFAULT_FILE_DATA, JSON.parse(content));
+    runInAction(() => {
+      Object.assign(this.fileData, fileData);
+    });
+  }
+
+  async saveFileData(): Promise<void> {
+    const content = JSON.stringify(this.fileData);
+    await this.app.vault.modify(this.file, content);
+  }
+
+  async onLoadFile(file: TFile): Promise<void> {
+    DEV ?? console.log(`onloadFile(${file.name})`);
+    this.file = file;
+    await this.loadFileData();
+  }
+
+  /**
+   * 切换同类型文件时触发
+   */
+  async onUnloadFile(file: TFile): Promise<void> {
+    DEV ?? console.log(`onUnloadFile(${file.name})`);
+  }
+
+  /**
+   * 关闭标签页时触发
+   */
+  async onClose(): Promise<void> {
+    DEV ?? console.log(`onClose(${PLUGIN_VIEW_TYPE})`);
+  }
+
+}
+
+export class TimelogView extends TimelogBaseView {
 
   onPaneMenu(menu: Menu, source: "more-options" | "tab-header" | string) {
     super.onPaneMenu(menu, source);
@@ -83,20 +143,58 @@ export class TimelogView extends FileView {
     });
   }
 
+  /**
+   * 判断当前视图是否正在执行计划
+   */
+  readonly isDoing = computed(() => {
+    const records = this.fileData.records;
+    if (records.length !== 0) {
+      const last = records.last()!;
+      if (last.stop === "") {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  /**
+   * 选中的计划
+   */
+  selectedPlanId = observable({ value: "" });
+
+  async startPlan(): Promise<void> {
+    DEV ?? console.log(this.isDoing.get());
+    if (this.isDoing.get()) {
+      throw Error("无法开始计划，请先停止当前计划！");
+    } else {
+      const start = moment().format(TIME_FMT);
+      const newRecord: Record = { start: start, stop: "", id: this.selectedPlanId.value };
+      runInAction(() => {
+        this.fileData.records.push(newRecord);
+      });
+      await this.saveFileData();
+    }
+  }
+
+  async stopPlan(): Promise<void> {
+    if (this.isDoing.get()) {
+      const stop = moment().format(TIME_FMT);
+      if (stop !== this.fileData.records.last()!.start) {
+        runInAction(() => {
+          this.fileData.records.last()!.stop = stop;
+        });
+        await this.saveFileData();
+      }
+    }
+  }
+  
   ctlEl: HTMLElement;
   ctxEl: HTMLElement;
 
   async onOpen(): Promise<void> {
     DEV ?? console.log(`onOpen(${PLUGIN_VIEW_TYPE})`);
-
-    this.registerInterval(
-      window.setInterval(() => {
-        // DEV ?? console.log(`计时器`, this);
-        runInAction(() => {
-          this.timer.value = moment().format("YYYY-MM-DD HH:mm:ss");
-        });
-      }, 1000)
-    );
+    
+    this.contentEl.addClasses(["timelog-view"]);
 
     const toolbarEl = this.contentEl.createDiv({ cls: "timelog-toolbar" });
     this.ctlEl = this.contentEl.createDiv({ cls: "timelog-ctl" });
@@ -115,7 +213,7 @@ export class TimelogView extends FileView {
       });
     });
     autorun(() => {
-      const v = planSelect.renderList(this.timelog.plans, this.timelog.records);
+      const v = planSelect.renderList(this.fileData.plans, this.fileData.records);
       runInAction(() => {
         this.selectedPlanId.value = v;
       });
@@ -136,7 +234,7 @@ export class TimelogView extends FileView {
     const clockTime = new BorderText(this.ctlEl);
     autorun(()=>{
       const status = this.isDoing.get();
-      const datetimeStr = status ? timeSub(this.timelog.records.last()!.start, this.timer.value, TIME_FMT) : this.timer.value;
+      const datetimeStr = status ? timeSub(this.fileData.records.last()!.start, this.heart.value, TIME_FMT) : this.heart.value;
       const dateStr = datetimeStr.replace(/\s[0-9:]*$/, "");
       const timeStr = datetimeStr.replace(/^[0-9\-]*\s/, "");
       clockDate.renderContent(dateStr);
@@ -152,7 +250,7 @@ export class TimelogView extends FileView {
     //
     const recordsTable = new RecordsTable(this.ctxEl);
     autorun(() => {
-      recordsTable.renderBody(this.timelog.plans, this.timelog.records);
+      recordsTable.renderBody(this.fileData.plans, this.fileData.records);
     });
     recordsTable.onClickStartCell((i, v) => {
       DEV ?? console.log(i, v);
@@ -163,136 +261,43 @@ export class TimelogView extends FileView {
     //
     const plansTableRender = PlansTable(this.ctxEl);
     autorun(() => {
-      plansTableRender(this.timelog.plans);
+      plansTableRender(this.fileData.plans);
     });
-  }
-
-  async onClose(): Promise<void> {
-    DEV ?? console.log(`onClose(${PLUGIN_VIEW_TYPE})`);
-    // 关闭标签页时触发
-  }
-
-  async onLoadFile(file: TFile): Promise<void> {
-    DEV ?? console.log(`onloadFile(${file.name})`);
-    this.file = file;
-    await this.loadTimelog();
-  }
-
-  async onUnloadFile(file: TFile): Promise<void> {
-    DEV ?? console.log(`onUnloadFile(${file.name})`);
-    // 切换时光日志时触发
   }
 
   /**
    * 监听数据，刷新记录视图（可视化图形）
    */
-  showRecordsChart(): void {
-    const mounted = this.ctxEl.createDiv();
-    autorun(() => {
-      mounted.empty();
-      const width = this.ctlWidth.value;
-      const height = 200;
-      const margin = { top: 30, right: 30, bottom: 30, left: 30 };
-      const innerW = width - margin.left - margin.right;
-      const innerH = height - margin.top - margin.bottom;
-      const svg = d3.select(mounted).append("svg").attr("width", width).attr("height", height);
-      const inner = svg.append("g").attr("transform", `translate(${margin.left}, ${margin.top})`);
+  // showRecordsChart(): void {
+  //   const mounted = this.ctxEl.createDiv();
+  //   autorun(() => {
+  //     mounted.empty();
+  //     const width = this.ctlWidth.value;
+  //     const height = 200;
+  //     const margin = { top: 30, right: 30, bottom: 30, left: 30 };
+  //     const innerW = width - margin.left - margin.right;
+  //     const innerH = height - margin.top - margin.bottom;
+  //     const svg = d3.select(mounted).append("svg").attr("width", width).attr("height", height);
+  //     const inner = svg.append("g").attr("transform", `translate(${margin.left}, ${margin.top})`);
 
-      const xScale = d3
-        .scaleTime()
-        .domain([moment().startOf("day"), moment().endOf("day")])
-        .range([0, innerW]);
-      // xScale.ticks(d3.utcMinute.every(15)!);
-      const xAxis = d3
-        .axisBottom(xScale)
-        .tickValues(xScale.ticks(d3.timeHour.every(1)!))
-        .tickFormat(d3.timeFormat("%H"));
-      inner.append("g").attr("transform", `translate(0, ${innerH})`).call(xAxis);
+  //     const xScale = d3
+  //       .scaleTime()
+  //       .domain([moment().startOf("day"), moment().endOf("day")])
+  //       .range([0, innerW]);
+  //     // xScale.ticks(d3.utcMinute.every(15)!);
+  //     const xAxis = d3
+  //       .axisBottom(xScale)
+  //       .tickValues(xScale.ticks(d3.timeHour.every(1)!))
+  //       .tickFormat(d3.timeFormat("%H"));
+  //     inner.append("g").attr("transform", `translate(0, ${innerH})`).call(xAxis);
 
-      const yScale = d3.scaleLinear().domain([0, 10]).range([0, innerH]);
-      inner.append("g").call(d3.axisLeft(yScale));
-    });
+  //     const yScale = d3.scaleLinear().domain([0, 10]).range([0, innerH]);
+  //     inner.append("g").call(d3.axisLeft(yScale));
+  //   });
 
-    // mounted.innerHTML = 'hi';
-  }
+  //   // mounted.innerHTML = 'hi';
+  // }
 
-  /**
-   * 计时器，用来刷新时间
-   */
-  timer = observable({ value: "0000-00-00 00:00:00" });
-
-  /**
-   * 心跳，一个时钟，用来刷新时间
-   */
-  // heart
-
-  /**
-   * 时间日志文件数据
-   */
-  timelog: Timelog = observable(DEFAULT_FILE_DATA);
-
-  /**
-   * 判断当前视图是否正在执行计划
-   */
-  readonly isDoing = computed(() => {
-    const records = this.timelog.records;
-    if (records.length !== 0) {
-      const last = records.last()!;
-      if (last.stop === "") {
-        return true;
-      }
-    }
-    return false;
-  });
-
-  /**
-   * 选中的计划
-   */
-  selectedPlanId = observable({ value: "" });
-
-  /**
-   * 内容区宽度
-   */
-  ctlWidth = observable({ value: 0 });
-
-  async loadTimelog() {
-    const content = await this.app.vault.read(this.file);
-    const fileData: Timelog = Object.assign({}, DEFAULT_FILE_DATA, JSON.parse(content));
-    runInAction(() => {
-      Object.assign(this.timelog, fileData);
-    });
-  }
-
-  async saveTimelog(): Promise<void> {
-    const content = JSON.stringify(this.timelog);
-    await this.app.vault.modify(this.file, content);
-  }
-
-  async startPlan(): Promise<void> {
-    DEV ?? console.log(this.isDoing.get());
-    if (this.isDoing.get()) {
-      throw Error("无法开始计划，请先停止当前计划！");
-    } else {
-      const start = moment().format(TIME_FMT);
-      const newRecord: Record = { start: start, stop: "", id: this.selectedPlanId.value };
-      runInAction(() => {
-        this.timelog.records.push(newRecord);
-      });
-      await this.saveTimelog();
-    }
-  }
-
-  async stopPlan(): Promise<void> {
-    if (this.isDoing.get()) {
-      const stop = moment().format(TIME_FMT);
-      if (stop !== this.timelog.records.last()!.start) {
-        runInAction(() => {
-          this.timelog.records.last()!.stop = stop;
-        });
-        await this.saveTimelog();
-      }
-    }
-  }
 }
 
 class PlanModal extends Modal {
@@ -356,15 +361,15 @@ class PlanModal extends Modal {
       } else if (plan.name === "") {
         tips.setDesc(`请输入计划名称`);
       } else {
-        const res = this.view.timelog.plans.filter(v => v.id === plan.id);
+        const res = this.view.fileData.plans.filter(v => v.id === plan.id);
         DEV ?? console.log(res);
         if (res.length !== 0) {
           tips.setDesc(`编号为【${res[0].id}】的计划【${res[0].name}】已经存在，请更改编号。`);
         } else {
           runInAction(() => {
-            this.view.timelog.plans.push(plan);
+            this.view.fileData.plans.push(plan);
           });
-          await this.view.saveTimelog();
+          await this.view.saveFileData();
           this.close();
         }
       }
@@ -374,11 +379,11 @@ class PlanModal extends Modal {
   changePlan() {
     this.setTitle("修改计划");
 
-    this.view.timelog.plans.forEach((plan, index) => {
+    this.view.fileData.plans.forEach((plan, index) => {
       new Setting(this.contentEl).setName(plan.id).addText(txt => {
         txt.setValue(plan.name).onChange(val => {
           runInAction(() => {
-            this.view.timelog.plans[index].name = val;
+            this.view.fileData.plans[index].name = val;
           });
         });
       });
@@ -387,12 +392,12 @@ class PlanModal extends Modal {
     this.onSave(evt => {
       DEV ?? console.log(`模态窗口 删除计划 on save 回调`);
       // 保存，将修改的内容写入文件
-      this.view.saveTimelog();
+      this.view.saveFileData();
     });
 
     this.onCancel(evt => {
       // 不保存，重新加载文件
-      this.view.loadTimelog();
+      this.view.loadFileData();
     });
   }
 }

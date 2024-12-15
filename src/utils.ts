@@ -12,8 +12,7 @@ import { moment } from "obsidian";
  */
 export function timeSub(start: string, stop: string, fmt: string): string {
   const du = moment.duration(moment(stop, fmt).diff(moment(start, fmt)));
-  DEV ?? console.log(`${du.isValid()}`);
-
+  // DEV ?? console.log(`${du.isValid()}`);
   if (du.isValid()) {
     const year = du.get("years").toString().padStart(4, "0");
     const month = du.get("months").toString().padStart(2, "0");
