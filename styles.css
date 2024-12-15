@@ -1,16 +1,48 @@
 
-.timelog-ctx {
-  width: 100%;
-  height: auto;
-}
-.timelog-ctl {}
-.timelog-btn {
-  flex: auto;
-  min-width: 150px;
-  max-width: 300px;
+/* 视图根 */
+.workspace-leaf-content .view-content.timelog-view {
+  padding: var(--file-margins);
 }
 
-.timelog-mainbtn {
-  background-color: white;
-  border-radius: 100px;
+/*************************************************************************
+** 工具栏
+*************************************************************************/
+.timelog-view .timelog-toolbar {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 5px;
+  /* justify-content: flex-start; */
+  align-items: center;
+  /* background-color: var(--background-secondary); */
+  /* border: var(--hr-color) solid 1px; */
+  border-radius: 3px;
+  padding: 5px 0;
+  margin-bottom: 1em;
 }
+
+/*************************************************************************
+** ctl 控制面板
+*************************************************************************/
+.timelog-view .timelog-ctl {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 1em;
+  justify-content: stretch;
+}
+/* 控制组件 */
+.timelog-view .timelog-ctl .timelog-ctl-item {
+  flex: 1 1 250px;
+  border: var(--hr-color) solid 1px;
+  background-color: var(--background-secondary);
+  border-radius: 3px;
+}
+
+/*************************************************************************
+** ctx 数据面板
+*************************************************************************/
+.timelog-view .timelog-ctx.markdown-preview-view {
+  /* 下面的样式用于覆盖掉 .markdown-preview-view 的样式 */
+  padding: 0;
+  overflow-y: visible;
+}
+

@@ -25,6 +25,15 @@ export class TimelogView extends FileView {
   navigation: boolean = true;
   allowNoFile: boolean = false;
   file: TFile;
+  plugin: TimelogPlugin;
+
+  constructor(leaf: WorkspaceLeaf, plugin: TimelogPlugin) {
+    super(leaf);
+    this.plugin = plugin;
+    this.contentEl.addClasses(["timelog-view"]);
+
+    DEV ?? console.log(`new TimeLogView( leaf: ${leaf.getDisplayText()}, plugin: ${plugin.manifest.id})`);
+  }
 
   canAcceptExtension(extension: string): boolean {
     return extension == PLUGIN_FILE_EXT;
@@ -74,28 +83,8 @@ export class TimelogView extends FileView {
     });
   }
 
-  plugin: TimelogPlugin;
   ctlEl: HTMLElement;
   ctxEl: HTMLElement;
-
-  constructor(leaf: WorkspaceLeaf, plugin: TimelogPlugin) {
-    super(leaf);
-    this.plugin = plugin;
-    this.contentEl.setCssStyles({ padding: "var(--file-margins)" });
-    const ctlEl = this.contentEl.createDiv({ cls: "timelog-ctl" });
-    // 不同的主题渲染表格采用的选择器不同
-    // 为了兼容多种主题，添加了 markdown-rendered markdown-preview-view
-    const ctxEl = this.contentEl.createDiv({ cls: "timelog-ctx markdown-rendered markdown-preview-view" });
-    this.ctlEl = ctlEl;
-    this.ctlEl.setCssStyles({
-      display: "flex",
-      justifyContent: "space-around",
-      flexWrap: "wrap",
-      gap: "1em",
-    });
-    this.ctxEl = ctxEl;
-    DEV ?? console.log(`new TimeLogView(${leaf}, ${plugin})`);
-  }
 
   async onOpen(): Promise<void> {
     DEV ?? console.log(`onOpen(${PLUGIN_VIEW_TYPE})`);
@@ -109,25 +98,18 @@ export class TimelogView extends FileView {
       }, 1000)
     );
 
-    // 测试块
-    const clockRender = Clock(this.ctlEl);
-    autorun(() => {
-      const t = this.isDoing.get() ? timeSub(this.timelog.records.last()!.start, this.timer.value, TIME_FMT) : this.timer.value;
-      const dateStr = t.replace(/\s[0-9:]*$/, "");
-      const timeStr = t.replace(/^[0-9\-]*\s/, "");
-      clockRender(dateStr, timeStr);
-    });
-    this.ctlEl.createDiv().setCssStyles({ height: "1em" });
-    const s2 = this.ctlEl.createDiv();
-    s2.setCssStyles({
-      display: "flex",
-      flexWrap: "wrap",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: "1em",
-    });
-    //
-    const planSelect = new PlanSelect(s2).onSelectChange(value => {
+    const toolbarEl = this.contentEl.createDiv({ cls: "timelog-toolbar" });
+    this.ctlEl = this.contentEl.createDiv({ cls: "timelog-ctl" });
+    // 不同的主题渲染表格采用的选择器不同
+    // 为了兼容多种主题，添加了 markdown-rendered markdown-preview-view
+    this.ctxEl = this.contentEl.createDiv({ cls: "timelog-ctx markdown-rendered markdown-preview-view" });
+
+    new ButtonComponent(toolbarEl).setIcon('circle-ellipsis').setTooltip('计划管理');
+    new ButtonComponent(toolbarEl).setIcon('clock').setTooltip('历史记录');
+    toolbarEl.createDiv().setCssStyles({flex: "1 1 auto"});
+
+    // 计划选择
+    const planSelect = new PlanSelect(toolbarEl).onSelectChange(value => {
       runInAction(() => {
         this.selectedPlanId.value = value;
       });
@@ -139,7 +121,7 @@ export class TimelogView extends FileView {
       });
     });
     // 开始/结束 按钮
-    const startButton = new StartButton(s2).onClick(() => {
+    const startButton = new StartButton(toolbarEl).onClick(() => {
       if (this.isDoing.get()) {
         this.stopPlan();
       } else {
@@ -148,6 +130,24 @@ export class TimelogView extends FileView {
     });
     autorun(() => {
       startButton.renderIcon(this.isDoing.get());
+    });
+    // 显示时间
+    const clockDate = new BorderText(this.ctlEl);
+    const clockTime = new BorderText(this.ctlEl);
+    autorun(()=>{
+      const status = this.isDoing.get();
+      const datetimeStr = status ? timeSub(this.timelog.records.last()!.start, this.timer.value, TIME_FMT) : this.timer.value;
+      const dateStr = datetimeStr.replace(/\s[0-9:]*$/, "");
+      const timeStr = datetimeStr.replace(/^[0-9\-]*\s/, "");
+      clockDate.renderContent(dateStr);
+      clockTime.renderContent(timeStr);
+      if (status) {
+        clockDate.enableHighlight();
+        clockTime.enableHighlight();
+      } else {
+        clockDate.disableHighlight();
+        clockTime.disableHighlight();
+      }
     });
     //
     const recordsTable = new RecordsTable(this.ctxEl);
@@ -514,54 +514,45 @@ class RecordsTable {
 }
 
 /**
- * 时钟组件
- * @param mountedEl 挂载点
- * @returns render 刷新视图的回调函数
+ * 带边框文本，等宽字符
+ * 用于显示时钟
  */
-function Clock(mountedEl: HTMLElement): (dateStr: string, timeStr: string) => void {
-  /**
-   * HTML
-   */
-  const rootEl = mountedEl.createDiv({ cls: "tl-container" });
-  rootEl.innerHTML = /*html*/ `
-    <div class="tl-wrapper">
-      <div class="text">YYYY-MM-DD</div>
-      <div class="text">HH:mm:ss</div>
-    </div>
-  `;
-  /**
-   * CSS
-   */
-  rootEl?.setCssStyles({});
-  const wrapperEl: HTMLDivElement | null = rootEl.querySelector(".tl-wrapper");
-  wrapperEl?.setCssStyles({
-    display: "flex",
-    alignSelf: "center",
-    justifyContent: "space-around",
-    flexWrap: "wrap",
-    padding: "1em",
-    gap: "1em",
-    border: "var(--hr-color) solid 3px",
-    borderRadius: "1em",
-  });
-  const textEls: NodeListOf<HTMLDivElement> = rootEl.querySelectorAll(".text");
-  textEls.forEach(textEl =>
-    textEl.setCssStyles({
+class BorderText {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  contentEl: HTMLElement;
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
+    this.contentEl = this.rootEl.createDiv();
+    this.rootEl.setCssStyles({
+      fontFamily: "var(--font-monospace-default)",
+      display: "flex",
+      alignSelf: "center",
+      justifyContent: "space-around",
+      flexWrap: "wrap",
+      padding: "1em",
+      gap: "1em",
+    });
+    this.contentEl.setCssStyles({
       color: "var(--h2-color)",
       fontSize: "var(--h2-size)",
       fontWeight: "bold",
       lineHeight: "var(--h2-line-height)",
     })
-  );
-  /**
-   * 视图刷新
-   */
-  const dateEl = textEls[0];
-  const timeEl = textEls[1];
-  return (dateStr, timeStr) => {
-    dateEl.innerText = dateStr;
-    timeEl.innerText = timeStr;
-  };
+  }
+  renderContent(str: string) {
+    this.contentEl.innerText = str;
+    return this;
+  }
+  enableHighlight() {
+    this.rootEl.setCssStyles({ color: "var(--interactive-accent)" });
+    return this;
+  }
+  disableHighlight() {
+    this.rootEl.setCssStyles({ color: "var(--h2-color)" });
+    return this;
+  }
 }
 
 /**
@@ -573,18 +564,12 @@ class PlanSelect {
   selectEl: HTMLSelectElement;
   constructor(mountedEl: HTMLElement) {
     this.mountedEl = mountedEl;
-    /**
-     * HTML
-     */
-    this.rootEl = this.mountedEl.createDiv();
+    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
     this.rootEl.innerHTML = /*html*/ `
       <select>
         <option><option>
       </select>
     `;
-    /**
-     * CSS
-     */
     this.rootEl.setCssStyles({
       display: "flex",
       flexWrap: "wrap",
@@ -630,21 +615,9 @@ class StartButton {
   btnCpt;
   constructor(mountedEl: HTMLElement) {
     this.mountedEl = mountedEl;
-    /**
-     * HTML
-     */
-    this.rootEl = this.mountedEl.createDiv();
+    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
     this.wrapperEl = this.rootEl.createDiv();
-    this.btnCpt = new ExtraButtonComponent(this.wrapperEl);
-    /**
-     * CSS
-     */
-    this.rootEl.setCssStyles({
-      padding: "1em",
-      border: "var(--hr-color) solid 3px",
-      borderRadius: "1em",
-    });
-    this.wrapperEl.setCssStyles({});
+    this.btnCpt = new ButtonComponent(this.wrapperEl);
   }
   onClick(cb: () => any): this {
     this.btnCpt.onClick(cb);
@@ -652,13 +625,14 @@ class StartButton {
   }
   /**
    * toggle icon
+   * 根据组件外部的状态来决定使用哪个图标
    * @param status boolean
    */
   renderIcon(status: boolean) {
-    if (status) {
-      this.btnCpt.setIcon("square");
-    } else {
-      this.btnCpt.setIcon("play");
+    if (status) { // stop
+      this.btnCpt.setIcon("circle-stop").setTooltip('停止计时');
+    } else { // start
+      this.btnCpt.setIcon("circle-play").setTooltip('开始计时');
     }
   }
 }
