@@ -13,6 +13,8 @@ import {
   MomentFormatComponent,
   moment,
   ExtraButtonComponent,
+  TextComponent,
+  TextAreaComponent,
 } from "obsidian";
 import { observable, action, autorun, flow, runInAction, computed } from "mobx";
 // import * as d3 from "d3";
@@ -57,7 +59,7 @@ class TimelogBaseView extends FileView {
 
     DEV ?? console.log(`new TimeLogView( leaf: ${leaf.getDisplayText()}, plugin: ${plugin.manifest.id})`);
   }
-  
+
   canAcceptExtension(extension: string): boolean {
     return extension == PLUGIN_FILE_EXT;
   }
@@ -106,11 +108,9 @@ class TimelogBaseView extends FileView {
   async onClose(): Promise<void> {
     DEV ?? console.log(`onClose(${PLUGIN_VIEW_TYPE})`);
   }
-
 }
 
 export class TimelogView extends TimelogBaseView {
-
   onPaneMenu(menu: Menu, source: "more-options" | "tab-header" | string) {
     super.onPaneMenu(menu, source);
     menu.addItem(item => {
@@ -187,25 +187,54 @@ export class TimelogView extends TimelogBaseView {
       }
     }
   }
-  
+
   ctlEl: HTMLElement;
   ctxEl: HTMLElement;
 
   async onOpen(): Promise<void> {
     DEV ?? console.log(`onOpen(${PLUGIN_VIEW_TYPE})`);
-    
+
     this.contentEl.addClasses(["timelog-view"]);
 
-    const toolbarEl = this.contentEl.createDiv({ cls: "timelog-toolbar" });
     this.ctlEl = this.contentEl.createDiv({ cls: "timelog-ctl" });
+    const toolbarEl = this.contentEl.createDiv({ cls: "timelog-toolbar" });
     // 不同的主题渲染表格采用的选择器不同
     // 为了兼容多种主题，添加了 markdown-rendered markdown-preview-view
     this.ctxEl = this.contentEl.createDiv({ cls: "timelog-ctx markdown-rendered markdown-preview-view" });
 
-    new ButtonComponent(toolbarEl).setIcon('circle-ellipsis').setTooltip('计划管理');
-    new ButtonComponent(toolbarEl).setIcon('clock').setTooltip('历史记录');
-    toolbarEl.createDiv().setCssStyles({flex: "1 1 auto"});
+    // 显示时间
+    const clockDate = new BorderText(this.ctlEl);
+    const clockTime = new BorderText(this.ctlEl);
+    autorun(() => {
+      const status = this.isDoing.get();
+      const datetimeStr = status ? timeSub(this.fileData.records.last()!.start, this.heart.value, TIME_FMT) : this.heart.value;
+      const dateStr = datetimeStr.replace(/\s[0-9:]*$/, "");
+      const timeStr = datetimeStr.replace(/^[0-9\-]*\s/, "");
+      clockDate.renderContent(dateStr);
+      clockTime.renderContent(timeStr);
+      if (status) {
+        clockDate.enableHighlight();
+        clockTime.enableHighlight();
+      } else {
+        clockDate.disableHighlight();
+        clockTime.disableHighlight();
+      }
+    });
 
+    new ButtonComponent(toolbarEl)
+      .setIcon("circle-x")
+      .setTooltip("清理面板")
+      .onClick(() => this.ctxEl.empty());
+    new ButtonComponent(toolbarEl)
+      .setIcon('circle-check')
+      .setTooltip("计划管理")
+      .onClick(() => this.showPlanPanel());
+    new ButtonComponent(toolbarEl)
+      .setIcon("clock")
+      .setTooltip("历史记录")
+      .onClick(() => this.showRecordPanel());
+    new ButtonComponent(toolbarEl).setIcon('chart-pie');
+    toolbarEl.createDiv().setCssStyles({ flex: "1 1 auto" });
     // 计划选择
     const planSelect = new PlanSelect(toolbarEl).onSelectChange(value => {
       runInAction(() => {
@@ -229,25 +258,18 @@ export class TimelogView extends TimelogBaseView {
     autorun(() => {
       startButton.renderIcon(this.isDoing.get());
     });
-    // 显示时间
-    const clockDate = new BorderText(this.ctlEl);
-    const clockTime = new BorderText(this.ctlEl);
-    autorun(()=>{
-      const status = this.isDoing.get();
-      const datetimeStr = status ? timeSub(this.fileData.records.last()!.start, this.heart.value, TIME_FMT) : this.heart.value;
-      const dateStr = datetimeStr.replace(/\s[0-9:]*$/, "");
-      const timeStr = datetimeStr.replace(/^[0-9\-]*\s/, "");
-      clockDate.renderContent(dateStr);
-      clockTime.renderContent(timeStr);
-      if (status) {
-        clockDate.enableHighlight();
-        clockTime.enableHighlight();
-      } else {
-        clockDate.disableHighlight();
-        clockTime.disableHighlight();
-      }
+  }
+
+  showPlanPanel() {
+    this.ctxEl.empty();
+    const plansTable = new PlansTable(this.ctxEl);
+    autorun(() => {
+      plansTable.renderBody(this.fileData.plans);
     });
-    //
+  }
+
+  showRecordPanel() {
+    this.ctxEl.empty();
     const recordsTable = new RecordsTable(this.ctxEl);
     autorun(() => {
       recordsTable.renderBody(this.fileData.plans, this.fileData.records);
@@ -257,11 +279,6 @@ export class TimelogView extends TimelogBaseView {
     });
     recordsTable.onClickStopCell((i, v) => {
       DEV ?? console.log(i, v);
-    });
-    //
-    const plansTableRender = PlansTable(this.ctxEl);
-    autorun(() => {
-      plansTableRender(this.fileData.plans);
     });
   }
 
@@ -297,7 +314,278 @@ export class TimelogView extends TimelogBaseView {
 
   //   // mounted.innerHTML = 'hi';
   // }
+}
 
+/**
+ * 刷新计划视图（表格视图）
+ */
+class PlansTable {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  bodyEl: HTMLElement;
+
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    this.rootEl = mountedEl.createDiv();
+    this.rootEl.setCssStyles({
+      overflowX: "scroll",
+    });
+    this.rootEl.createEl("h2", { text: "计划" });
+    const toolbar = this.rootEl.createDiv({ cls: "timelog-toolbar" });
+    this.bodyEl = this.rootEl.createDiv();
+    new ButtonComponent(toolbar).setIcon("circle-plus").setTooltip("添加计划");
+    toolbar.createDiv().setCssStyles({ flex: "1 1 auto" });
+  }
+  renderBody(plans: Plan[]) {
+    this.bodyEl?.empty();
+    for (const plan of plans) {
+      let isEdit: boolean = false;
+      let saveButton: ExtraButtonComponent | null = null;
+      const row = new Setting(this.bodyEl);
+      row.setName(plan.name);
+      row.setDesc(plan.id);
+      row.addExtraButton(btn => {
+        btn.setIcon("edit");
+        btn.onClick(() => {
+          isEdit = !isEdit;
+          if (isEdit) {
+            row.nameEl.empty();
+            row.descEl.empty();
+            new TextComponent(row.nameEl).setValue(plan.name);
+            new TextAreaComponent(row.descEl).setValue(plan.id);
+            btn.setIcon("save");
+          } else {
+            btn.setIcon("edit");
+            row.nameEl.empty();
+            row.descEl.empty();
+            row.setName(plan.name);
+            row.setDesc(plan.id);
+          }
+        });
+      });
+      row.addExtraButton(btn => {
+        btn.setIcon("trash");
+      });
+    }
+  }
+}
+
+/**
+ * 记录视图（表格形式）
+ */
+class RecordsTable {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  tbodyEl: HTMLTableSectionElement;
+
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv();
+    this.rootEl.setCssStyles({
+      overflowX: "scroll",
+    });
+    this.rootEl.innerHTML = /*html*/ `
+      <h2>记录</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>index</th>
+            <th>计划</th>
+            <th>时长</th>
+            <th>开始时间</th>
+            <th>结束时间</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    `;
+    this.tbodyEl = this.rootEl.querySelector("table tbody")!;
+  }
+
+  /**
+   * 点击修改开始时间
+   */
+  onClickStartCell(cb: (index: string, value: string) => any): this {
+    this.onClickStartCellCb = cb;
+    return this;
+  }
+  private onClickStartCellCb: (index: string, value: string) => any = () => null;
+  /**
+   * 点击修改结束时间
+   */
+  onClickStopCell(cb: (index: string, value: string) => any): this {
+    this.onClickStopCellCb = cb;
+    return this;
+  }
+  private onClickStopCellCb: (index: string, value: string) => any = () => null;
+  /**
+   * 刷新表格主体
+   */
+  renderBody(plans: Plan[], records: Record[]) {
+    this.tbodyEl.empty();
+    const newR: [Record, number][] = records.map((v, i) => [v, i]);
+    const lastR = newR.slice(-5).reverse();
+    let body = "";
+    for (const [record, index] of lastR) {
+      body += /*html*/ `
+        <tr data-index="${index}">
+          <td>${index}</td>
+          <td>${plans.find(plan => record.id === plan.id)!.name ?? ""}</td>
+          <td>${timeSub(record.start, record.stop, TIME_FMT)}</td>
+          <td class="tl-start">${record.start}</td>
+          <td class="tl-stop">${record.stop}</td>
+        </tr>
+      `;
+    }
+    this.tbodyEl.innerHTML = body;
+    const startCells = this.tbodyEl.querySelectorAll(".tl-start");
+    startCells.forEach(start =>
+      start.addEventListener("click", evt => {
+        const td = evt.target as HTMLTableCellElement;
+        const tr = td.parentElement as HTMLTableRowElement;
+        const index = tr.getAttribute("data-index");
+        const value = td.textContent;
+        if (index && value) this.onClickStartCellCb(index, value);
+      })
+    );
+    const stopCells = this.tbodyEl.querySelectorAll(".tl-stop");
+    stopCells.forEach(stop =>
+      stop.addEventListener("click", evt => {
+        const td = evt.target as HTMLTableCellElement;
+        const tr = td.parentElement as HTMLTableRowElement;
+        const index = tr.getAttribute("data-index");
+        const value = td.textContent;
+        if (index && value) this.onClickStartCellCb(index, value);
+      })
+    );
+  }
+}
+
+/**
+ * 带边框文本，等宽字符
+ * 用于显示时钟
+ */
+class BorderText {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  contentEl: HTMLElement;
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
+    this.contentEl = this.rootEl.createDiv();
+    this.rootEl.setCssStyles({
+      fontFamily: "var(--font-monospace-default)",
+      display: "flex",
+      alignSelf: "center",
+      justifyContent: "space-around",
+      flexWrap: "wrap",
+      padding: "1em",
+      gap: "1em",
+    });
+    this.contentEl.setCssStyles({
+      color: "var(--h2-color)",
+      fontSize: "var(--h2-size)",
+      fontWeight: "bold",
+      lineHeight: "var(--h2-line-height)",
+    });
+  }
+  renderContent(str: string) {
+    this.contentEl.innerText = str;
+    return this;
+  }
+  enableHighlight() {
+    this.rootEl.setCssStyles({ color: "var(--interactive-accent)" });
+    return this;
+  }
+  disableHighlight() {
+    this.rootEl.setCssStyles({ color: "var(--h2-color)" });
+    return this;
+  }
+}
+
+/**
+ * 计划选择器
+ */
+class PlanSelect {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  selectEl: HTMLSelectElement;
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
+    this.rootEl.innerHTML = /*html*/ `
+      <select>
+        <option><option>
+      </select>
+    `;
+    this.rootEl.setCssStyles({
+      display: "flex",
+      flexWrap: "wrap",
+    });
+    this.selectEl = this.rootEl.querySelector("select")!;
+  }
+  /**
+   * 用户手动选择时的事件回调
+   */
+  onSelectChange(cb: (value: string) => any): this {
+    this.selectEl.addEventListener("change", evt => {
+      cb((evt.target as HTMLSelectElement).value);
+    });
+    return this;
+  }
+  /**
+   * 刷新选择器可选列表
+   * @param plans
+   * @param records
+   * @returns
+   */
+  renderList(plans: Plan[], records: Record[]): string {
+    this.selectEl.empty();
+    let options = "";
+    for (const plan of plans) {
+      options += /*html*/ `
+        <option value="${plan.id}">${plan.name}</option>
+      `;
+    }
+    this.selectEl.innerHTML = options;
+    if (records.length !== 0) this.selectEl.value = records.last()!.id;
+    return this.selectEl.value;
+  }
+}
+
+/**
+ * 开始按钮
+ */
+class StartButton {
+  mountedEl: HTMLElement;
+  rootEl: HTMLElement;
+  wrapperEl: HTMLElement;
+  btnCpt;
+  constructor(mountedEl: HTMLElement) {
+    this.mountedEl = mountedEl;
+    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
+    this.wrapperEl = this.rootEl.createDiv();
+    this.btnCpt = new ButtonComponent(this.wrapperEl);
+  }
+  onClick(cb: () => any): this {
+    this.btnCpt.onClick(cb);
+    return this;
+  }
+  /**
+   * toggle icon
+   * 根据组件外部的状态来决定使用哪个图标
+   * @param status boolean
+   */
+  renderIcon(status: boolean) {
+    if (status) {
+      // stop
+      this.btnCpt.setIcon("circle-stop").setTooltip("停止计时");
+    } else {
+      // start
+      this.btnCpt.setIcon("circle-play").setTooltip("开始计时");
+    }
+  }
 }
 
 class PlanModal extends Modal {
@@ -399,303 +687,5 @@ class PlanModal extends Modal {
       // 不保存，重新加载文件
       this.view.loadFileData();
     });
-  }
-}
-
-/**
- * 刷新计划视图（表格视图）
- */
-function PlansTable(mountedEl: HTMLElement): (plans: Plan[]) => void {
-  const rootEl = mountedEl.createDiv({});
-  rootEl.innerHTML = /*html*/ `
-    <h2>计划</h2>
-    <table>
-      <thead><tr><th>名称</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  `;
-  /**
-   * 渲染视图
-   */
-  const bodyEl = rootEl.querySelector("table tbody");
-  return plans => {
-    bodyEl?.empty();
-    let body = "";
-    for (const plan of plans) {
-      body += /*html*/ `<tr><td>${plan.name}</td></tr>`;
-    }
-    if (bodyEl) bodyEl.innerHTML = body;
-  };
-}
-
-/**
- * 记录视图（表格形式）
- */
-class RecordsTable {
-  mountedEl: HTMLElement;
-  /**
-   * HTML
-   */
-  rootEl: HTMLElement;
-  tbodyEl: HTMLTableSectionElement;
-  constructor(mountedEl: HTMLElement) {
-    this.mountedEl = mountedEl;
-    this.rootEl = this.mountedEl.createDiv({});
-    this.rootEl.innerHTML = /*html*/ `
-      <h2>记录</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>index</th>
-            <th>计划</th>
-            <th>时长</th>
-            <th>开始时间</th>
-            <th>结束时间</th>
-          </tr>
-        </thead>
-        <tbody>
-        </tbody>
-      </table>
-    `;
-    this.tbodyEl = this.rootEl.querySelector("table tbody")!;
-  }
-  /**
-   * 点击修改开始时间
-   */
-  onClickStartCell(cb: (index: string, value: string) => any): this {
-    this.onClickStartCellCb = cb;
-    return this;
-  }
-  private onClickStartCellCb: (index: string, value: string) => any = () => null;
-  /**
-   * 点击修改结束时间
-   */
-  onClickStopCell(cb: (index: string, value: string) => any): this {
-    this.onClickStopCellCb = cb;
-    return this;
-  }
-  private onClickStopCellCb: (index: string, value: string) => any = () => null;
-  /**
-   * 刷新表格主体
-   */
-  renderBody(plans: Plan[], records: Record[]) {
-    this.tbodyEl.empty();
-    const newR: [Record, number][] = records.map((v, i) => [v, i]);
-    const lastR = newR.slice(-5).reverse();
-    let body = "";
-    for (const [record, index] of lastR) {
-      body += /*html*/ `
-        <tr data-index="${index}">
-          <td>${index}</td>
-          <td>${plans.find(plan => record.id === plan.id)!.name ?? ""}</td>
-          <td>${timeSub(record.start, record.stop, TIME_FMT)}</td>
-          <td class="tl-start">${record.start}</td>
-          <td class="tl-stop">${record.stop}</td>
-        </tr>
-      `;
-    }
-    this.tbodyEl.innerHTML = body;
-    const startCells = this.tbodyEl.querySelectorAll(".tl-start");
-    startCells.forEach(start =>
-      start.addEventListener("click", evt => {
-        const td = evt.target as HTMLTableCellElement;
-        const tr = td.parentElement as HTMLTableRowElement;
-        const index = tr.getAttribute("data-index");
-        const value = td.textContent;
-        if (index && value) this.onClickStartCellCb(index, value);
-      })
-    );
-    const stopCells = this.tbodyEl.querySelectorAll(".tl-stop");
-    stopCells.forEach(stop =>
-      stop.addEventListener("click", evt => {
-        const td = evt.target as HTMLTableCellElement;
-        const tr = td.parentElement as HTMLTableRowElement;
-        const index = tr.getAttribute("data-index");
-        const value = td.textContent;
-        if (index && value) this.onClickStartCellCb(index, value);
-      })
-    );
-  }
-}
-
-/**
- * 带边框文本，等宽字符
- * 用于显示时钟
- */
-class BorderText {
-  mountedEl: HTMLElement;
-  rootEl: HTMLElement;
-  contentEl: HTMLElement;
-  constructor(mountedEl: HTMLElement) {
-    this.mountedEl = mountedEl;
-    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
-    this.contentEl = this.rootEl.createDiv();
-    this.rootEl.setCssStyles({
-      fontFamily: "var(--font-monospace-default)",
-      display: "flex",
-      alignSelf: "center",
-      justifyContent: "space-around",
-      flexWrap: "wrap",
-      padding: "1em",
-      gap: "1em",
-    });
-    this.contentEl.setCssStyles({
-      color: "var(--h2-color)",
-      fontSize: "var(--h2-size)",
-      fontWeight: "bold",
-      lineHeight: "var(--h2-line-height)",
-    })
-  }
-  renderContent(str: string) {
-    this.contentEl.innerText = str;
-    return this;
-  }
-  enableHighlight() {
-    this.rootEl.setCssStyles({ color: "var(--interactive-accent)" });
-    return this;
-  }
-  disableHighlight() {
-    this.rootEl.setCssStyles({ color: "var(--h2-color)" });
-    return this;
-  }
-}
-
-/**
- * 计划选择器
- */
-class PlanSelect {
-  mountedEl: HTMLElement;
-  rootEl: HTMLElement;
-  selectEl: HTMLSelectElement;
-  constructor(mountedEl: HTMLElement) {
-    this.mountedEl = mountedEl;
-    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
-    this.rootEl.innerHTML = /*html*/ `
-      <select>
-        <option><option>
-      </select>
-    `;
-    this.rootEl.setCssStyles({
-      display: "flex",
-      flexWrap: "wrap",
-    });
-    this.selectEl = this.rootEl.querySelector("select")!;
-  }
-  /**
-   * 用户手动选择时的事件回调
-   */
-  onSelectChange(cb: (value: string) => any): this {
-    this.selectEl.addEventListener("change", evt => {
-      cb((evt.target as HTMLSelectElement).value);
-    });
-    return this;
-  }
-  /**
-   * 刷新选择器可选列表
-   * @param plans
-   * @param records
-   * @returns
-   */
-  renderList(plans: Plan[], records: Record[]): string {
-    this.selectEl.empty();
-    let options = "";
-    for (const plan of plans) {
-      options += /*html*/ `
-        <option value="${plan.id}">${plan.name}</option>
-      `;
-    }
-    this.selectEl.innerHTML = options;
-    if (records.length !== 0) this.selectEl.value = records.last()!.id;
-    return this.selectEl.value;
-  }
-}
-
-/**
- * 开始按钮
- */
-class StartButton {
-  mountedEl: HTMLElement;
-  rootEl: HTMLElement;
-  wrapperEl: HTMLElement;
-  btnCpt;
-  constructor(mountedEl: HTMLElement) {
-    this.mountedEl = mountedEl;
-    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl-item" });
-    this.wrapperEl = this.rootEl.createDiv();
-    this.btnCpt = new ButtonComponent(this.wrapperEl);
-  }
-  onClick(cb: () => any): this {
-    this.btnCpt.onClick(cb);
-    return this;
-  }
-  /**
-   * toggle icon
-   * 根据组件外部的状态来决定使用哪个图标
-   * @param status boolean
-   */
-  renderIcon(status: boolean) {
-    if (status) { // stop
-      this.btnCpt.setIcon("circle-stop").setTooltip('停止计时');
-    } else { // start
-      this.btnCpt.setIcon("circle-play").setTooltip('开始计时');
-    }
-  }
-}
-
-class Ctl {
-  mountedEl: HTMLElement;
-  rootEl: HTMLElement;
-  constructor(mountedEl: HTMLElement) {
-    this.mountedEl = mountedEl;
-    /**
-     * HTML
-     */
-    this.rootEl = this.mountedEl.createDiv({ cls: "timelog-ctl tl-ctl-node1" });
-    this.rootEl.innerHTML = /*html*/ `
-      <div class="tl-ctl-node2">
-        <div class="tl-ctl-node3 tl-ctl-mounted1"></div>
-        <div class="tl-ctl-node3 tl-ctl-mounted2"></div>
-      </div>
-      <div class="tl-ctl-node2">
-        <div class="tl-ctl-node3 tl-ctl-mounted3"></div>
-        <div class="tl-ctl-node3 tl-ctl-mounted4"></div>
-      </div>
-    `;
-    /**
-     * CSS
-     */
-    // node1
-    this.rootEl.setCssStyles({
-      display: "flex",
-      flexFlow: "row wrap",
-      gap: "20px",
-    });
-    // node2
-    this.rootEl.querySelectorAll(".tl-ctl-node2").forEach(el =>
-      (el as HTMLElement).setCssStyles({
-        flex: "1 0 400px",
-        display: "flex",
-        flexFlow: "row wrap",
-        gap: "20px",
-      })
-    );
-    // node3
-    this.rootEl.querySelectorAll(".tl-ctl-node3").forEach(el =>
-      (el as HTMLElement).setCssStyles({
-        flex: "1 0 200px",
-      })
-    );
-  }
-  getM1() {
-    return this.rootEl.querySelector('.tl-ctl-mounted1') as HTMLElement;
-  }
-  getM2() {
-    return this.rootEl.querySelector('.tl-ctl-mounted2') as HTMLElement;
-  }
-  getM3() {
-    return this.rootEl.querySelector('.tl-ctl-mounted3') as HTMLElement;
-  }
-  getM4() {
-    return this.rootEl.querySelector('.tl-ctl-mounted4') as HTMLElement;
   }
 }

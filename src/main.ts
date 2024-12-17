@@ -1,9 +1,7 @@
-import { observable, runInAction } from "mobx";
-import { Plugin, Notice, Menu, MenuItem, PluginSettingTab, Setting, EventRef, TFolder, TFile, moment } from "obsidian";
+import { Plugin, Notice, Menu, MenuItem, PluginSettingTab, Setting, EventRef, TFolder } from "obsidian";
 
 import {
   Settings,
-  Timelog,
   DEFAULT_SETTINGS,
   PLUGIN_VIEW_TYPE,
   PLUGIN_FILE_EXT,
@@ -104,8 +102,10 @@ export default class TimelogPlugin extends Plugin {
 
 class TimelogSettingTab extends PluginSettingTab {
   plugin: TimelogPlugin;
-
+  
   display(): void {
+    this.containerEl.empty();
+
     new Setting(this.containerEl)
       .setName("工具栏按钮")
       .setDesc(`在工具栏添加一个按钮，按钮的功能是在仓库根目录新建一个${PLUGIN_NAME}文件`)
@@ -117,7 +117,8 @@ class TimelogSettingTab extends PluginSettingTab {
           this.plugin.enableRibbonIcon(value);
         });
       });
-    new Setting(this.containerEl)
+    
+      new Setting(this.containerEl)
       .setName("文件管理器右键菜单项")
       .setDesc(`在文件管理器右键菜单添加一项，菜单项的功能是在指定目录新建一个时间${PLUGIN_NAME}文件`)
       .addToggle(toggle => {
