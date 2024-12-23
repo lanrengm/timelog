@@ -262,7 +262,7 @@ export class TimelogView extends TimelogBaseView {
 
   showPlanPanel() {
     this.ctxEl.empty();
-    const plansTable = new PlansTable(this.ctxEl);
+    const plansTable = new PlanPanel(this.ctxEl);
     autorun(() => {
       plansTable.renderBody(this.fileData.plans);
     });
@@ -317,9 +317,9 @@ export class TimelogView extends TimelogBaseView {
 }
 
 /**
- * 刷新计划视图（表格视图）
+ * 计划面板
  */
-class PlansTable {
+class PlanPanel {
   mountedEl: HTMLElement;
   rootEl: HTMLElement;
   bodyEl: HTMLElement;
