@@ -1,11 +1,13 @@
 {
 	"name": "timelog",
-	"version": "0.2.1",
+	"version": "0.3.0",
 	"description": "时光日志",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs dev",
-		"build": "node esbuild.config.mjs"
+		"build": "node esbuild.config.mjs",
+    "version:fix": "node version.mjs fix",
+    "version:new": "node version.mjs new"
 	},
 	"keywords": [],
 	"author": "",

@@ -1,8 +1,11 @@
 # 时光日志
 
+[Github](https://github.com/lanrengm/timelog) [Gitee](https://gitee.com/lanren_007/timelog)
+
 Obsidian 插件。
 
 像记账一样记录每日的工作内容。
+
 
 ## 安装方式
 
